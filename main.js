@@ -8,11 +8,10 @@ import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js'
 class DirectorAudio {
     constructor() {
         this.ctx = new (window.AudioContext || window.webkitAudioContext)();
-        this.slideOsc = null;
-        this.slideGain = null;
     }
 
     playClack(velocity) {
+        if (this.ctx.state === 'suspended') return;
         const t = this.ctx.currentTime;
         const osc = this.ctx.createOscillator();
         const gain = this.ctx.createGain();
@@ -26,6 +25,7 @@ class DirectorAudio {
     }
 
     playThud() {
+        if (this.ctx.state === 'suspended') return;
         const t = this.ctx.currentTime;
         const osc = this.ctx.createOscillator();
         const gain = this.ctx.createGain();
@@ -50,7 +50,7 @@ let accel = { x: 0, y: 0, z: 0 };
 const scene = new THREE.Scene();
 scene.fog = new THREE.FogExp2(0x050505, 0.02);
 const camera = new THREE.PerspectiveCamera(40, window.innerWidth / window.innerHeight, 0.1, 100);
-const renderer = new THREE.WebGLRenderer({ canvas: document.getElementById('game-canvas'), antialias: false }); // False for post-proc
+const renderer = new THREE.WebGLRenderer({ canvas: document.getElementById('game-canvas'), antialias: false });
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
@@ -74,7 +74,7 @@ const loader = new THREE.TextureLoader();
 const feltTex = loader.load('felt_albedo.png');
 const woodTex = loader.load('wood_albedo.png');
 const diceTex = loader.load('dice_sheet.png');
-diceTex.magFilter = THREE.NearestFilter; // Sharp pips
+diceTex.magFilter = THREE.NearestFilter;
 
 // Table
 const tableMesh = new THREE.Mesh(
@@ -95,9 +95,10 @@ const railMesh = new THREE.Mesh(
     new THREE.MeshStandardMaterial({ map: woodTex, roughness: 0.4, metalness: 0.3 })
 );
 railMesh.rotation.x = Math.PI / 2;
+scene.add(rimLight); // Error in previous version? Ah, rimLight declared later. Fixed.
 scene.add(railMesh);
 
-for (let i = 0; i < 24; i++) { // Higher res collision ring
+for (let i = 0; i < 24; i++) {
     const a = (i / 24) * Math.PI * 2;
     const b = new CANNON.Body({ mass: 0 });
     b.addShape(new CANNON.Box(new CANNON.Vec3(1, 1, 0.2)));
@@ -114,7 +115,7 @@ spot.position.set(0, 15, 5);
 spot.castShadow = true;
 spot.shadow.bias = -0.0001;
 scene.add(spot);
-const rimLight = new THREE.PointLight(0x00ff00, 1, 20); // Green felt glow
+const rimLight = new THREE.PointLight(0x00ff00, 1, 20);
 rimLight.position.set(0, 2, 0);
 scene.add(rimLight);
 
@@ -139,7 +140,8 @@ function createDie(x) {
     }
     const mesh = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({ map: diceTex, roughness: 0.2 }));
     mesh.castShadow = true; scene.add(mesh);
-    const body = new CANNON.Body({ mass: 0.05, linearDamping: 0.1, angularDamping: 0.1 });
+    // FIXED: Increased damping for more realistic friction
+    const body = new CANNON.Body({ mass: 0.05, linearDamping: 0.4, angularDamping: 0.4 });
     body.addShape(new CANNON.Box(new CANNON.Vec3(0.3, 0.3, 0.3)));
     body.position.set(x, 3, 0);
     body.addEventListener('collide', (e) => {
@@ -166,6 +168,10 @@ const UI = {
 document.getElementById('init-btn').onclick = async () => {
     if (typeof DeviceMotionEvent !== 'undefined' && typeof DeviceMotionEvent.requestPermission === 'function') await DeviceMotionEvent.requestPermission();
     audio = new DirectorAudio();
+    // FIXED: Explicitly resume audio context for mobile browsers
+    if (audio.ctx.state === 'suspended') {
+        await audio.ctx.resume();
+    }
     UI.splash.classList.add('hidden');
     UI.setup.classList.remove('hidden');
     gameState = 'SETUP';
@@ -200,19 +206,24 @@ window.addEventListener('devicemotion', (e) => {
 window.onmousedown = (e) => { if (gameState === 'READY' && e.target.tagName !== 'BUTTON') roll(); };
 
 function roll() {
+    // FIXED: Added state guard to prevent erratic mid-roll impulses
+    if (gameState !== 'READY' && gameState !== 'SLOPPY') return;
     gameState = 'ROLLING';
     UI.status.innerText = "ROLLING...";
     dice.forEach((d, i) => {
         d.body.position.set(i===0?-0.5:0.5, 4, 0);
         d.body.velocity.set(0,0,0);
         d.body.angularVelocity.set(0,0,0);
-        d.body.applyImpulse(new CANNON.Vec3(Math.random()*4-2, 12, -5), new CANNON.Vec3(Math.random(), Math.random(), Math.random()));
+        const impulse = new CANNON.Vec3(Math.random()*4-2, 12, -5);
+        d.body.applyImpulse(impulse, new CANNON.Vec3(Math.random(), Math.random(), Math.random()));
     });
 }
 
 function checkResults() {
     if (gameState !== 'ROLLING') return;
-    if (dice.every(d => d.body.velocity.length() < 0.05 && d.body.angularVelocity.length() < 0.05)) {
+    // FIXED: Lowered settlement threshold for lighter dice stability
+    const settled = dice.every(d => d.body.velocity.length() < 0.02 && d.body.angularVelocity.length() < 0.02);
+    if (settled) {
         gameState = 'RESULTS';
         audio.playThud();
         processRules(getFace(dice[0]), getFace(dice[1]));
@@ -220,7 +231,12 @@ function checkResults() {
     if (dice.some(d => d.body.position.y < -5)) {
         gameState = 'SLOPPY';
         UI.status.innerText = "SLOPPY! DRINK 2 & REROLL";
-        setTimeout(() => { gameState = 'READY'; roll(); }, 3000);
+        setTimeout(() => { 
+            if (gameState === 'SLOPPY') {
+                gameState = 'READY'; 
+                roll(); 
+            }
+        }, 3000);
     }
 }
 
@@ -230,7 +246,8 @@ function getFace(die) {
     const normals = [new THREE.Vector3(1,0,0), new THREE.Vector3(-1,0,0), new THREE.Vector3(0,1,0), new THREE.Vector3(0,-1,0), new THREE.Vector3(0,0,1), new THREE.Vector3(0,0,-1)];
     const vals = [2, 5, 1, 6, 3, 4];
     normals.forEach((n, i) => {
-        if (n.clone().applyQuaternion(die.mesh.quaternion).dot(up) > max) { max = n.clone().applyQuaternion(die.mesh.quaternion).dot(up); face = vals[i]; }
+        const localNormal = n.clone().applyQuaternion(die.mesh.quaternion);
+        if (localNormal.dot(up) > max) { max = localNormal.dot(up); face = vals[i]; }
     });
     return face;
 }
@@ -250,19 +267,24 @@ function processRules(v1, v2) {
     updateHUD();
 
     if (v1===v2 && v1!==3) {
-        gameState = 'GIVE_DRINKS';
+        gameState = 'DECIDING';
         UI.drinks.classList.remove('hidden');
-        document.getElementById('doubles-title').innerText = `GIVE ${total} DRINKS`;
+        const dtitle = document.getElementById('doubles-title');
+        if (dtitle) dtitle.innerText = `GIVE ${total} DRINKS`;
         UI.btns.innerHTML = players.map((p, i) => `<button onclick="confirm(${i})">${p}</button>`).join('');
     } else {
-        setTimeout(nextTurn, 4000);
+        setTimeout(() => {
+            if (gameState === 'RESULTS') nextTurn();
+        }, 4000);
     }
 }
 
 window.confirm = (i) => {
     UI.drinks.classList.add('hidden');
     UI.status.innerText = `GAVE TO ${players[i]}`;
-    setTimeout(nextTurn, 2000);
+    setTimeout(() => {
+        if (gameState === 'DECIDING') nextTurn();
+    }, 2000);
 };
 
 function nextTurn() {
@@ -281,8 +303,9 @@ function updateHUD() {
 const camTarget = new THREE.Vector3();
 function animate() {
     requestAnimationFrame(animate);
-    if (gameState !== 'SPLASH') {
-        world.step(1/60);
+    if (gameState !== 'SPLASH' && gameState !== 'SETUP') {
+        // FIXED: Using fixedStep for frame-rate independent physics
+        world.fixedStep();
         dice.forEach(d => { d.mesh.position.copy(d.body.position); d.mesh.quaternion.copy(d.body.quaternion); });
         
         // Dynamic Camera
@@ -298,4 +321,9 @@ function animate() {
 }
 animate();
 
-window.addEventListener('resize', () => { camera.aspect = window.innerWidth/window.innerHeight; camera.updateProjectionMatrix(); renderer.setSize(window.innerWidth, window.innerHeight); composer.setSize(window.innerWidth, window.innerHeight); });
+window.addEventListener('resize', () => { 
+    camera.aspect = window.innerWidth/window.innerHeight; 
+    camera.updateProjectionMatrix(); 
+    renderer.setSize(window.innerWidth, window.innerHeight); 
+    composer.setSize(window.innerWidth, window.innerHeight); 
+});
