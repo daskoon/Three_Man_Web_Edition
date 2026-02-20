@@ -95,7 +95,6 @@ const railMesh = new THREE.Mesh(
     new THREE.MeshStandardMaterial({ map: woodTex, roughness: 0.4, metalness: 0.3 })
 );
 railMesh.rotation.x = Math.PI / 2;
-scene.add(rimLight); // Error in previous version? Ah, rimLight declared later. Fixed.
 scene.add(railMesh);
 
 for (let i = 0; i < 24; i++) {
@@ -115,6 +114,8 @@ spot.position.set(0, 15, 5);
 spot.castShadow = true;
 spot.shadow.bias = -0.0001;
 scene.add(spot);
+
+// FIXED: Moved definition before usage
 const rimLight = new THREE.PointLight(0x00ff00, 1, 20);
 rimLight.position.set(0, 2, 0);
 scene.add(rimLight);
@@ -140,7 +141,6 @@ function createDie(x) {
     }
     const mesh = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({ map: diceTex, roughness: 0.2 }));
     mesh.castShadow = true; scene.add(mesh);
-    // FIXED: Increased damping for more realistic friction
     const body = new CANNON.Body({ mass: 0.05, linearDamping: 0.4, angularDamping: 0.4 });
     body.addShape(new CANNON.Box(new CANNON.Vec3(0.3, 0.3, 0.3)));
     body.position.set(x, 3, 0);
@@ -162,16 +162,16 @@ const UI = {
     threeMan: document.getElementById('current-3man'),
     turn: document.getElementById('current-turn'),
     drinks: document.getElementById('drinks-overlay'),
+    doublesTitle: document.getElementById('doubles-title'),
     btns: document.getElementById('recipient-buttons')
 };
 
 document.getElementById('init-btn').onclick = async () => {
-    if (typeof DeviceMotionEvent !== 'undefined' && typeof DeviceMotionEvent.requestPermission === 'function') await DeviceMotionEvent.requestPermission();
-    audio = new DirectorAudio();
-    // FIXED: Explicitly resume audio context for mobile browsers
-    if (audio.ctx.state === 'suspended') {
-        await audio.ctx.resume();
+    if (typeof DeviceMotionEvent !== 'undefined' && typeof DeviceMotionEvent.requestPermission === 'function') {
+        try { await DeviceMotionEvent.requestPermission(); } catch(e) {}
     }
+    audio = new DirectorAudio();
+    if (audio.ctx.state === 'suspended') await audio.ctx.resume();
     UI.splash.classList.add('hidden');
     UI.setup.classList.remove('hidden');
     gameState = 'SETUP';
@@ -206,7 +206,6 @@ window.addEventListener('devicemotion', (e) => {
 window.onmousedown = (e) => { if (gameState === 'READY' && e.target.tagName !== 'BUTTON') roll(); };
 
 function roll() {
-    // FIXED: Added state guard to prevent erratic mid-roll impulses
     if (gameState !== 'READY' && gameState !== 'SLOPPY') return;
     gameState = 'ROLLING';
     UI.status.innerText = "ROLLING...";
@@ -221,7 +220,6 @@ function roll() {
 
 function checkResults() {
     if (gameState !== 'ROLLING') return;
-    // FIXED: Lowered settlement threshold for lighter dice stability
     const settled = dice.every(d => d.body.velocity.length() < 0.02 && d.body.angularVelocity.length() < 0.02);
     if (settled) {
         gameState = 'RESULTS';
@@ -231,12 +229,7 @@ function checkResults() {
     if (dice.some(d => d.body.position.y < -5)) {
         gameState = 'SLOPPY';
         UI.status.innerText = "SLOPPY! DRINK 2 & REROLL";
-        setTimeout(() => { 
-            if (gameState === 'SLOPPY') {
-                gameState = 'READY'; 
-                roll(); 
-            }
-        }, 3000);
+        setTimeout(() => { if (gameState === 'SLOPPY') { gameState = 'READY'; roll(); } }, 3000);
     }
 }
 
@@ -269,22 +262,17 @@ function processRules(v1, v2) {
     if (v1===v2 && v1!==3) {
         gameState = 'DECIDING';
         UI.drinks.classList.remove('hidden');
-        const dtitle = document.getElementById('doubles-title');
-        if (dtitle) dtitle.innerText = `GIVE ${total} DRINKS`;
+        if (UI.doublesTitle) UI.doublesTitle.innerText = `GIVE ${total} DRINKS`;
         UI.btns.innerHTML = players.map((p, i) => `<button onclick="confirm(${i})">${p}</button>`).join('');
     } else {
-        setTimeout(() => {
-            if (gameState === 'RESULTS') nextTurn();
-        }, 4000);
+        setTimeout(() => { if (gameState === 'RESULTS') nextTurn(); }, 4000);
     }
 }
 
 window.confirm = (i) => {
     UI.drinks.classList.add('hidden');
     UI.status.innerText = `GAVE TO ${players[i]}`;
-    setTimeout(() => {
-        if (gameState === 'DECIDING') nextTurn();
-    }, 2000);
+    setTimeout(() => { if (gameState === 'DECIDING') nextTurn(); }, 2000);
 };
 
 function nextTurn() {
@@ -304,11 +292,9 @@ const camTarget = new THREE.Vector3();
 function animate() {
     requestAnimationFrame(animate);
     if (gameState !== 'SPLASH' && gameState !== 'SETUP') {
-        // FIXED: Using fixedStep for frame-rate independent physics
         world.fixedStep();
         dice.forEach(d => { d.mesh.position.copy(d.body.position); d.mesh.quaternion.copy(d.body.quaternion); });
         
-        // Dynamic Camera
         const midX = (dice[0].mesh.position.x + dice[1].mesh.position.x) / 2;
         const midZ = (dice[0].mesh.position.z + dice[1].mesh.position.z) / 2;
         camTarget.set(midX * 0.5, 10, 10 + midZ * 0.5);
@@ -317,13 +303,8 @@ function animate() {
         
         checkResults();
     }
-    composer.render();
+    renderer.render(scene, camera);
 }
 animate();
 
-window.addEventListener('resize', () => { 
-    camera.aspect = window.innerWidth/window.innerHeight; 
-    camera.updateProjectionMatrix(); 
-    renderer.setSize(window.innerWidth, window.innerHeight); 
-    composer.setSize(window.innerWidth, window.innerHeight); 
-});
+window.addEventListener('resize', () => { camera.aspect = window.innerWidth/window.innerHeight; camera.updateProjectionMatrix(); renderer.setSize(window.innerWidth, window.innerHeight); composer.setSize(window.innerWidth, window.innerHeight); });
