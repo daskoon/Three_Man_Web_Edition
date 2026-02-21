@@ -39,7 +39,7 @@ class DirectorAudio {
 let players = [];
 let turnIdx = 0;
 let threeManIdx = -1;
-let gameState = 'SPLASH';
+let gameState = 'SPLASH'; // SPLASH, SETUP, READY, SHAKING, ROLLING, RESULTS, DECIDING
 let audio;
 let settleCounter = 0;
 const clock = new THREE.Clock();
@@ -51,7 +51,6 @@ scene.fog = new THREE.FogExp2(0x050505, 0.02);
 const camera = new THREE.PerspectiveCamera(40, window.innerWidth / window.innerHeight, 0.1, 100);
 const renderer = new THREE.WebGLRenderer({ canvas: document.getElementById('game-canvas'), antialias: true, alpha: true });
 renderer.setSize(window.innerWidth, window.innerHeight);
-// FIX: Cap pixel ratio to prevent GPU thermal throttling
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
@@ -105,24 +104,16 @@ function createDieTexture(number) {
     const canvas = document.createElement('canvas');
     canvas.width = 256; canvas.height = 256;
     const ctx = canvas.getContext('2d');
-    ctx.fillStyle = '#ffffff';
-    ctx.fillRect(0, 0, 256, 256);
-    ctx.strokeStyle = '#dddddd';
-    ctx.lineWidth = 20;
-    ctx.strokeRect(0, 0, 256, 256);
+    ctx.fillStyle = '#ffffff'; ctx.fillRect(0, 0, 256, 256);
+    ctx.strokeStyle = '#dddddd'; ctx.lineWidth = 20; ctx.strokeRect(0, 0, 256, 256);
     ctx.fillStyle = '#111111';
     const pips = {
-        1: [[128, 128]],
-        2: [[64, 64], [192, 192]],
-        3: [[64, 64], [128, 128], [192, 192]],
-        4: [[64, 64], [192, 64], [64, 192], [192, 192]],
-        5: [[64, 64], [192, 64], [128, 128], [64, 192], [192, 192]],
+        1: [[128, 128]], 2: [[64, 64], [192, 192]], 3: [[64, 64], [128, 128], [192, 192]],
+        4: [[64, 64], [192, 64], [64, 192], [192, 192]], 5: [[64, 64], [192, 64], [128, 128], [64, 192], [192, 192]],
         6: [[64, 64], [192, 64], [64, 128], [192, 128], [64, 192], [192, 192]]
     };
     pips[number].forEach(p => {
-        ctx.beginPath();
-        ctx.arc(p[0], p[1], 25, 0, Math.PI * 2);
-        ctx.fill();
+        ctx.beginPath(); ctx.arc(p[0], p[1], 25, 0, Math.PI * 2); ctx.fill();
     });
     const tex = new THREE.CanvasTexture(canvas);
     tex.anisotropy = renderer.capabilities.getMaxAnisotropy();
@@ -130,16 +121,14 @@ function createDieTexture(number) {
 }
 
 const dieMaterials = [
-    new THREE.MeshStandardMaterial({ map: createDieTexture(2) }),
-    new THREE.MeshStandardMaterial({ map: createDieTexture(5) }),
-    new THREE.MeshStandardMaterial({ map: createDieTexture(1) }),
-    new THREE.MeshStandardMaterial({ map: createDieTexture(6) }),
-    new THREE.MeshStandardMaterial({ map: createDieTexture(3) }),
-    new THREE.MeshStandardMaterial({ map: createDieTexture(4) })
+    new THREE.MeshStandardMaterial({ map: createDieTexture(2) }), new THREE.MeshStandardMaterial({ map: createDieTexture(5) }),
+    new THREE.MeshStandardMaterial({ map: createDieTexture(1) }), new THREE.MeshStandardMaterial({ map: createDieTexture(6) }),
+    new THREE.MeshStandardMaterial({ map: createDieTexture(3) }), new THREE.MeshStandardMaterial({ map: createDieTexture(4) })
 ];
 
 function createDie(x) {
-    const mesh = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.6, 0.6), dieMaterials);
+    const geo = new THREE.BoxGeometry(0.6, 0.6, 0.6);
+    const mesh = new THREE.Mesh(geo, dieMaterials);
     mesh.castShadow = true;
     scene.add(mesh);
     const body = new CANNON.Body({ mass: 0, type: CANNON.Body.STATIC });
@@ -159,92 +148,105 @@ const dice = [createDie(-0.6), createDie(0.6)];
 
 // --- UI ---
 const UI = {
-    splash: document.getElementById('splash-screen'),
-    setup: document.getElementById('setup-screen'),
     status: document.getElementById('action-text'),
     threeMan: document.getElementById('current-3man'),
     turn: document.getElementById('current-turn'),
     drinks: document.getElementById('drinks-overlay'),
     doublesTitle: document.getElementById('doubles-title'),
     btns: document.getElementById('recipient-buttons'),
-    playerList: document.getElementById('player-list')
+    playerList: document.getElementById('player-list'),
+    playerInput: document.getElementById('player-input')
+};
+
+// Consolidated UI functions
+function renderPlayers() {
+    UI.playerList.innerHTML = players.map((p, k) => `
+        <div class='player-entry'>
+            <span>${p}</span>
+            <button onclick='window.removePlayer(${k})'>X</button>
+        </div>
+    `).join('');
+}
+
+window.removePlayer = (idx) => {
+    players.splice(idx, 1);
+    renderPlayers();
 };
 
 document.getElementById('init-btn').onclick = async () => {
-    if (typeof DeviceMotionEvent !== 'undefined' && typeof DeviceMotionEvent.requestPermission === 'function') {
-        try { await DeviceMotionEvent.requestPermission(); } catch(e) {}
-    }
+    if (typeof DeviceMotionEvent !== 'undefined' && typeof DeviceMotionEvent.requestPermission === 'function') await DeviceMotionEvent.requestPermission();
     audio = new DirectorAudio();
     if (audio.ctx.state === 'suspended') await audio.ctx.resume();
-    UI.splash.classList.add('hidden');
-    UI.setup.classList.remove('hidden');
+    document.getElementById('splash-screen').classList.add('hidden');
+    document.getElementById('setup-screen').classList.remove('hidden');
     gameState = 'SETUP';
 };
 
 document.getElementById('add-player-btn').onclick = () => {
-    const i = document.getElementById('player-input');
-    if (i.value.trim()) {
-        players.push(i.value.trim());
-        renderSetup();
-        i.value = '';
+    const val = UI.playerInput.value.trim();
+    if (val) {
+        players.push(val);
+        renderPlayers();
+        UI.playerInput.value = '';
     }
 };
 
-function renderSetup() {
-    UI.playerList.innerHTML = players.map((p, k) => `<div class='player-entry'><span>${p}</span><button onclick='players.splice(${k},1); window.dispatchEvent(new Event("renderPlayers"))'>X</button></div>`).join('');
-}
-window.addEventListener('renderPlayers', renderSetup);
-
 document.getElementById('start-game-btn').onclick = () => {
     if (players.length < 2) return alert("Need 2+ players");
-    UI.setup.classList.add('hidden');
+    document.getElementById('setup-screen').classList.add('hidden');
     turnIdx = players.length - 1; 
     nextTurn();
 };
 
+let accelMag = 0;
 window.addEventListener('devicemotion', (e) => {
-    if (gameState !== 'READY') return;
+    if (gameState !== 'READY' && gameState !== 'SHAKING') return;
     const a = e.accelerationIncludingGravity;
     if (!a) return;
-    const mag = Math.sqrt(a.x**2 + a.y**2 + a.z**2);
-    // FIX: Lowered threshold for better accessibility
-    if (mag > 22) roll();
+    accelMag = Math.sqrt(a.x**2 + a.y**2 + a.z**2);
+    if (accelMag > 22) {
+        if (gameState === 'READY') gameState = 'SHAKING';
+    } else if (gameState === 'SHAKING' && accelMag < 15) {
+        throwDice();
+    }
 });
 
 window.onmousedown = (e) => { 
-    if (gameState === 'READY' && e.target.tagName !== 'BUTTON') roll(); 
+    if (gameState === 'READY' && e.target.tagName !== 'BUTTON') {
+        gameState = 'SHAKING';
+        setTimeout(throwDice, 800);
+    }
 };
 
-function roll() {
-    if (gameState !== 'READY' && gameState !== 'SLOPPY') return;
+function throwDice() {
+    if (gameState !== 'SHAKING') return;
     gameState = 'ROLLING';
     settleCounter = 0;
-    UI.status.innerText = "ROLLING...";
+    UI.status.innerText = "ROLL!";
+    
     dice.forEach((d, i) => {
-        d.body.wakeUp();
         d.body.type = CANNON.Body.DYNAMIC;
         d.body.mass = 0.05;
         d.body.updateMassProperties();
-        d.body.position.set(i===0?-0.6:0.6, 4, 0); 
-        d.body.velocity.set(0,0,0);
-        d.body.angularVelocity.set(0,0,0);
-        const force = new CANNON.Vec3(Math.random()*6-3, 15, -8);
-        d.body.applyImpulse(force, new CANNON.Vec3(Math.random()*0.2, 0.2, Math.random()*0.2));
+        d.body.wakeUp();
+        const force = new CANNON.Vec3(Math.random()*0.4 - 0.2, 0.5, -0.8);
+        d.body.applyImpulse(force, new CANNON.Vec3(Math.random()*0.01, 0.01, Math.random()*0.01));       
     });
+    if (navigator.vibrate) navigator.vibrate(150);
 }
 
 function checkResults() {
     if (gameState !== 'ROLLING') return;
-    const isStill = dice.every(d => d.body.velocity.length() < 0.05 && d.body.angularVelocity.length() < 0.05);
-    if (isStill) {
+    const settled = dice.every(d => d.body.velocity.length() < 0.05 && d.body.angularVelocity.length() < 0.05);
+    if (settled) {
         settleCounter++;
+        if (settleCounter > 30) {
+            gameState = 'RESULTS';
+            audio.playThud();
+            processRules(getFace(dice[0]), getFace(dice[1]));
+        }
     } else {
         settleCounter = 0;
-    }
-    if (settleCounter > 30) {
-        gameState = 'RESULTS';
-        audio.playThud();
-        processRules(getFace(dice[0]), getFace(dice[1]));
     }
     if (dice.some(d => d.body.position.y < -5)) triggerSloppy();
 }
@@ -271,8 +273,10 @@ function processRules(v1, v2) {
     if (v1===3 || v2===3 || total===3) { threeManIdx = turnIdx; events.push("THREE MAN!"); }
     if (total===7) events.push("PREV DRINKS");
     if (total===11) events.push("CURRENT DRINKS");
+    
     UI.status.innerText = `ROLLED ${v1} & ${v2}\n${events.join(' | ')}`;
     updateHUD();
+
     if (v1===v2 && v1!==3) {
         gameState = 'DECIDING';
         UI.drinks.classList.remove('hidden');
@@ -294,12 +298,6 @@ function nextTurn() {
     gameState = 'READY';
     updateHUD();
     UI.status.innerText = `${players[turnIdx].toUpperCase()}\nSHAKE TO ROLL`;
-    dice.forEach((d, i) => {
-        d.body.type = CANNON.Body.STATIC;
-        d.body.position.set(i===0?-0.6:0.6, 2, 0); 
-        d.body.velocity.set(0,0,0); d.body.angularVelocity.set(0,0,0);
-        d.body.quaternion.set(0,0,0,1);
-    });
 }
 
 function updateHUD() {
@@ -310,26 +308,49 @@ function updateHUD() {
 function triggerSloppy() {
     gameState = 'SLOPPY';
     UI.status.innerText = "SLOPPY! DRINK 2 & REROLL";
-    setTimeout(() => { if (gameState === 'SLOPPY') { gameState = 'READY'; roll(); } }, 3000);
+    setTimeout(() => { if (gameState === 'SLOPPY') { gameState = 'READY'; nextTurn(); turnIdx--; } }, 3000);
 }
 
 const camTarget = new THREE.Vector3();
 function animate() {
     requestAnimationFrame(animate);
     const dt = clock.getDelta();
+    
     if (gameState !== 'SPLASH' && gameState !== 'SETUP') {
-        // FIX: Frame-rate independent physics
         world.step(fixedTimeStep, dt, 3);
-        dice.forEach(d => {
-            d.mesh.position.copy(d.body.position);
-            d.mesh.quaternion.copy(d.body.quaternion);
+        if (!dice[0] || !dice[1]) return;
+
+        const lerpFactor = 1.0 - Math.pow(0.001, dt);
+        
+        dice.forEach((d, i) => {
+            if (gameState === 'READY') {
+                const targetPos = new THREE.Vector3(i === 0 ? -0.8 : 0.8, 6, 6);
+                d.mesh.position.lerp(targetPos, lerpFactor);
+                d.mesh.rotation.y += 0.01;
+                d.body.position.set(d.mesh.position.x, d.mesh.position.y, d.mesh.position.z);
+            } else if (gameState === 'SHAKING') {
+                const jitter = (Math.random() - 0.5) * (accelMag / 20);
+                d.mesh.position.x += jitter;
+                d.mesh.position.y += jitter;
+                d.body.position.set(d.mesh.position.x, d.mesh.position.y, d.mesh.position.z);
+            } else {
+                d.mesh.position.copy(d.body.position);
+                d.mesh.quaternion.copy(d.body.quaternion);
+            }
         });
+
         const midX = (dice[0].mesh.position.x + dice[1].mesh.position.x) / 2;
-        camTarget.set(midX * 0.3, 10, 10);
-        // FIX: Frame-rate independent camera LERP
-        const lerpFactor = 1.0 - Math.pow(0.01, dt);
-        camera.position.lerp(camTarget, lerpFactor); 
-        camera.lookAt(midX * 0.1, 0, 0);
+        
+        if (gameState === 'READY' || gameState === 'SHAKING') {
+            camTarget.set(0, 12, 15);
+            camera.position.lerp(camTarget, lerpFactor);
+            camera.lookAt(0, 4, 0);
+        } else {
+            camTarget.set(midX * 0.3, 10, 10);
+            camera.position.lerp(camTarget, lerpFactor); 
+            camera.lookAt(midX * 0.1, 0, 0);
+        }
+        
         checkResults();
     }
     renderer.render(scene, camera);
