@@ -61,6 +61,12 @@ button:active { transform: scale(0.96); }
     box-shadow: 0 5px 20px var(--gold-glow);
 }
 
+.secondary-btn {
+    background: rgba(255,255,255,0.05); color: #fff; border: 1px solid #444;
+    width: 100%; margin-top: 15px; font-size: 1rem; opacity: 0.6;
+}
+.secondary-btn:hover { opacity: 1; background: rgba(255,255,255,0.1); }
+
 .hud-box {
     background: rgba(0,0,0,0.5); backdrop-filter: blur(10px);
     padding: 10px 20px; border-radius: 30px;

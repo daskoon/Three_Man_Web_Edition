@@ -98,20 +98,26 @@ document.getElementById('add-player-btn').onclick = () => {
     if (val) { players.push(val); renderPlayers(); UI.playerInput.value = ''; }
 };
 
-document.getElementById('start-game-btn').onclick = () => {
-    if (players.length < 2) return alert("Need 2+ players");
+const startGame = () => {
     document.getElementById('setup-screen').classList.add('hidden');
     turnIdx = players.length - 1; 
     nextTurn();
 };
 
+document.getElementById('start-game-btn').onclick = () => {
+    if (players.length < 2) return alert("Need 2+ players");
+    startGame();
+};
+
 document.getElementById('quick-play-btn').onclick = () => {
     const legends = ["SKOON", "FACE", "RICH", "BLAZE", "ROB", "CRUSTY", "BM", "SHADOW"];
-    // Pick 5 random unique names
-    players = legends.sort(() => 0.5 - Math.random()).slice(0, 5);
-    document.getElementById('setup-screen').classList.add('hidden');
-    turnIdx = players.length - 1; 
-    nextTurn();
+    const shuffled = [...legends];
+    for (let i = shuffled.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+    }
+    players = shuffled.slice(0, 5);
+    startGame();
 };
 
 // --- CORE LOGIC ---
