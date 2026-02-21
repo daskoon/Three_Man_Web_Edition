@@ -4,6 +4,7 @@ import { DirectorAudio } from './audio.js';
 import { createDieTexture, getFace } from './dice.js';
 import { setupPhysics, createDieBody } from './physics.js';
 import { evaluateRules } from './rules.js';
+import { UI } from './ui.js';
 
 // --- STATE ---
 let players = [];
@@ -13,8 +14,14 @@ let gameState = 'SPLASH'; // SPLASH, SETUP, READY, SHAKING, ROLLING, RESULTS, DE
 let audio;
 let settleCounter = 0;
 let accelMag = 0;
+let gameTimer = null;
 const clock = new THREE.Clock();
 const fixedTimeStep = 1 / 60;
+
+const safeSetTimeout = (fn, delay) => {
+    clearTimeout(gameTimer);
+    gameTimer = setTimeout(fn, delay);
+};
 
 // --- 3D ENGINE ---
 const scene = new THREE.Scene();
@@ -65,41 +72,38 @@ const dice = [
 ];
 dice.forEach(d => { d.mesh.castShadow = true; scene.add(d.mesh); });
 
-// --- UI HANDLERS ---
-const UI = {
-    status: document.getElementById('action-text'),
-    threeMan: document.getElementById('current-3man'),
-    turn: document.getElementById('current-turn'),
-    drinks: document.getElementById('drinks-overlay'),
-    doublesTitle: document.getElementById('doubles-title'),
-    btns: document.getElementById('recipient-buttons'),
-    playerList: document.getElementById('player-list'),
-    playerInput: document.getElementById('player-input')
+// --- UI LOGIC ---
+const updateHUD = () => {
+    UI.updateHUD(players[turnIdx], threeManIdx === -1 ? null : players[threeManIdx]);
 };
 
-function renderPlayers() {
-    UI.playerList.innerHTML = players.map((p, k) => `
-        <div class='player-entry'><span>${p}</span><button onclick='window.removePlayer(${k})'>X</button></div>
-    `).join('');
-}
-window.removePlayer = (idx) => { players.splice(idx, 1); renderPlayers(); };
+const nextTurn = () => {
+    turnIdx = (turnIdx + 1) % players.length;
+    gameState = 'READY';
+    updateHUD();
+    UI.setStatus(`${players[turnIdx].toUpperCase()}\nSHAKE TO ROLL`);
+};
 
 document.getElementById('init-btn').onclick = async () => {
     if (typeof DeviceMotionEvent !== 'undefined' && typeof DeviceMotionEvent.requestPermission === 'function') await DeviceMotionEvent.requestPermission();
     audio = new DirectorAudio();
     await audio.resume();
-    document.getElementById('splash-screen').classList.add('hidden');
-    document.getElementById('setup-screen').classList.remove('hidden');
+    UI.splash.classList.add('hidden');
+    UI.setup.classList.remove('hidden');
     gameState = 'SETUP';
 };
 
 document.getElementById('add-player-btn').onclick = () => {
     const val = UI.playerInput.value.trim();
-    if (val) { players.push(val); renderPlayers(); UI.playerInput.value = ''; }
+    if (val) {
+        players.push(val);
+        UI.renderPlayers(players, (idx) => { players.splice(idx, 1); UI.renderPlayers(players, window.removePlayer); });
+        UI.playerInput.value = '';
+    }
 };
 
 const startGame = () => {
-    document.getElementById('setup-screen').classList.add('hidden');
+    UI.setup.classList.add('hidden');
     turnIdx = players.length - 1; 
     nextTurn();
 };
@@ -111,11 +115,7 @@ document.getElementById('start-game-btn').onclick = () => {
 
 document.getElementById('quick-play-btn').onclick = () => {
     const legends = ["SKOON", "FACE", "RICH", "BLAZE", "ROB", "CRUSTY", "BM", "SHADOW"];
-    const shuffled = [...legends];
-    for (let i = shuffled.length - 1; i > 0; i--) {
-        const j = Math.floor(Math.random() * (i + 1));
-        [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
-    }
+    const shuffled = [...legends].sort(() => 0.5 - Math.random()); // Standard shuffle here is fine for quickplay
     players = shuffled.slice(0, 5);
     startGame();
 };
@@ -125,7 +125,7 @@ function throwDice() {
     if (gameState !== 'SHAKING') return;
     gameState = 'ROLLING';
     settleCounter = 0;
-    UI.status.innerText = "THROW!";
+    UI.setStatus("THROW!");
     
     dice.forEach((d, i) => {
         d.body.position.set(d.mesh.position.x, d.mesh.position.y, d.mesh.position.z);
@@ -133,22 +133,10 @@ function throwDice() {
         d.body.mass = 0.05;
         d.body.updateMassProperties();
         d.body.wakeUp();
-        const force = new CANNON.Vec3(Math.random()*0.4 - 0.2, 0.5, -0.8);
+        const force = new CANNON.Vec3(Math.random()*0.4 - 0.2, 0.5, -3);
         d.body.applyImpulse(force, new CANNON.Vec3(Math.random()*0.01, 0.01, Math.random()*0.01));       
     });
     if (navigator.vibrate) navigator.vibrate(150);
-}
-
-function nextTurn() {
-    turnIdx = (turnIdx + 1) % players.length;
-    gameState = 'READY';
-    updateHUD();
-    UI.status.innerText = `${players[turnIdx].toUpperCase()}\nSHAKE TO ROLL`;
-}
-
-function updateHUD() {
-    UI.threeMan.innerText = `3MAN: ${threeManIdx === -1 ? 'NONE' : players[threeManIdx].toUpperCase()}`;
-    UI.turn.innerText = `TURN: ${players[turnIdx].toUpperCase()}`;
 }
 
 window.addEventListener('devicemotion', (e) => {
@@ -178,9 +166,10 @@ function animate() {
     const lerpFactor = 1.0 - Math.pow(0.01, dt);
     
     if (gameState !== 'SPLASH' && gameState !== 'SETUP') {
-        world.step(fixedTimeStep, dt, 3);
+        // High-precision sub-stepping (survive mobile hiccups)
+        world.step(fixedTimeStep, dt, 10);
+        if (!dice[0] || !dice[1]) return;
         
-        // Midpoint Tracking
         const midX = (dice[0].mesh.position.x + dice[1].mesh.position.x) / 2;
         const midZ = (dice[0].mesh.position.z + dice[1].mesh.position.z) / 2;
 
@@ -191,7 +180,8 @@ function animate() {
                 d.mesh.scale.lerp(new THREE.Vector3(1, 1, 1), lerpFactor);
                 d.mesh.rotation.y += 0.01;
             } else if (gameState === 'SHAKING') {
-                const jitter = (Math.random() - 0.5) * (accelMag / 20);
+                // Normalized jitter across refresh rates
+                const jitter = (Math.random() - 0.5) * (accelMag / 20) * (dt * 60);
                 d.mesh.position.x += jitter; d.mesh.position.y += jitter;
             } else if (gameState === 'ROLLING') {
                 d.mesh.scale.lerp(new THREE.Vector3(0.5, 0.5, 0.5), lerpFactor * 0.5);
@@ -220,21 +210,35 @@ function animate() {
                 if (settleCounter > 40) {
                     gameState = 'RESULTS';
                     audio.playThud();
-                    const { events, newThreeManIdx } = evaluateRules(getFace(dice[0].mesh), getFace(dice[1].mesh), players, turnIdx, threeManIdx);
+                    const v1 = getFace(dice[0].mesh);
+                    const v2 = getFace(dice[1].mesh);
+                    const { events, newThreeManIdx } = evaluateRules(v1, v2, players, turnIdx, threeManIdx);
                     threeManIdx = newThreeManIdx;
-                    UI.status.innerText = `ROLLED ${getFace(dice[0].mesh)} & ${getFace(dice[1].mesh)}\n${events.join(' | ')}`;
+                    UI.setStatus(`ROLLED ${v1} & ${v2}\n${events.join(' | ')}`);
                     updateHUD();
                     
-                    if (getFace(dice[0].mesh) === getFace(dice[1].mesh)) {
+                    if (v1 === v2) {
                         gameState = 'DECIDING';
-                        UI.drinks.classList.remove('hidden');
-                        UI.doublesTitle.innerText = `DOUBLES! GIVE ${getFace(dice[0].mesh)*2} DRINKS`;
-                        UI.btns.innerHTML = players.map((p, i) => `<button onclick="confirmDrinks(${i})">${p}</button>`).join('');
+                        UI.showDrinks(v1 * 2, players, (idx) => {
+                            UI.setStatus(`GAVE TO ${players[idx]}`);
+                            safeSetTimeout(nextTurn, 2000);
+                        });
                     } else {
-                        setTimeout(() => { if (gameState === 'RESULTS') nextTurn(); }, 5000);
+                        safeSetTimeout(nextTurn, 5000);
                     }
                 }
             } else { settleCounter = 0; }
+            
+            // Sloppy Check
+            const dist = Math.sqrt(midX**2 + midZ**2);
+            if (dist > 6.5 || dice.some(d => d.body.position.y < -5)) {
+                gameState = 'SLOPPY';
+                UI.setStatus("SLOPPY! DRINK 2 & REROLL");
+                safeSetTimeout(() => { 
+                    gameState = 'READY'; 
+                    nextTurn(); turnIdx = (turnIdx - 1 + players.length) % players.length;
+                }, 3000);
+            }
         } else {
             camTarget.set(midX, 4, midZ + 2);
             camera.position.lerp(camTarget, lerpFactor);
@@ -243,12 +247,6 @@ function animate() {
     }
     renderer.render(scene, camera);
 }
-
-window.confirmDrinks = (i) => {
-    UI.drinks.classList.add('hidden');
-    UI.status.innerText = `GAVE TO ${players[i]}`;
-    setTimeout(() => { if (gameState === 'DECIDING') nextTurn(); }, 2000);
-};
 
 animate();
 window.addEventListener('resize', () => { 
