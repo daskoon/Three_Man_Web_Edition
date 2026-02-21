@@ -105,6 +105,15 @@ document.getElementById('start-game-btn').onclick = () => {
     nextTurn();
 };
 
+document.getElementById('quick-play-btn').onclick = () => {
+    const legends = ["SKOON", "FACE", "RICH", "BLAZE", "ROB", "CRUSTY", "BM", "SHADOW"];
+    // Pick 5 random unique names
+    players = legends.sort(() => 0.5 - Math.random()).slice(0, 5);
+    document.getElementById('setup-screen').classList.add('hidden');
+    turnIdx = players.length - 1; 
+    nextTurn();
+};
+
 // --- CORE LOGIC ---
 function throwDice() {
     if (gameState !== 'SHAKING') return;
