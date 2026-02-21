@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import * as CANNON from 'cannon-es';
 
-// --- AUDIO DIRECTOR ---
+// --- AUDIO ENGINE ---
 class DirectorAudio {
     constructor() {
         this.ctx = new (window.AudioContext || window.webkitAudioContext)();
@@ -42,6 +42,7 @@ let threeManIdx = -1;
 let gameState = 'SPLASH';
 let audio;
 let accel = { x: 0, y: 0, z: 0 };
+let settleCounter = 0;
 
 // --- 3D SCENE ---
 const scene = new THREE.Scene();
@@ -51,12 +52,13 @@ const renderer = new THREE.WebGLRenderer({ canvas: document.getElementById('game
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 renderer.shadowMap.enabled = true;
-renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 
 // Physics World
-const world = new CANNON.World({ gravity: new CANNON.Vec3(0, -25, 0) });
-world.defaultContactMaterial.friction = 0.3;
-world.defaultContactMaterial.restitution = 0.4;
+const world = new CANNON.World();
+world.gravity.set(0, -25, 0);
+world.allowSleep = true;
+world.defaultContactMaterial.friction = 0.4;
+world.defaultContactMaterial.restitution = 0.3;
 
 // Assets
 const loader = new THREE.TextureLoader();
@@ -64,7 +66,7 @@ const feltTex = loader.load('felt_albedo.png');
 const woodTex = loader.load('wood_albedo.png');
 const diceTex = loader.load('dice_sheet.png');
 
-// Table
+// --- TABLE ---
 const tableMesh = new THREE.Mesh(
     new THREE.CylinderGeometry(6, 6, 0.5, 64),
     new THREE.MeshStandardMaterial({ map: feltTex, roughness: 0.8 })
@@ -73,8 +75,9 @@ tableMesh.receiveShadow = true;
 scene.add(tableMesh);
 
 const tableBody = new CANNON.Body({ mass: 0 });
-tableBody.addShape(new CANNON.Cylinder(6, 6, 0.5, 64));
-tableBody.quaternion.setFromAxisAngle(new CANNON.Vec3(1, 0, 0), -Math.PI / 2);
+const tableShape = new CANNON.Box(new CANNON.Vec3(10, 0.5, 10));
+tableBody.addShape(tableShape);
+tableBody.position.set(0, -0.25, 0);
 world.addBody(tableBody);
 
 // Rails
@@ -95,15 +98,11 @@ for (let i = 0; i < 24; i++) {
 }
 
 // Lighting
-scene.add(new THREE.AmbientLight(0xffffff, 0.5));
+scene.add(new THREE.AmbientLight(0xffffff, 0.6));
 const spot = new THREE.SpotLight(0xffd700, 2);
 spot.position.set(0, 15, 5);
 spot.castShadow = true;
 scene.add(spot);
-
-const rimLight = new THREE.PointLight(0x00ff00, 1, 20);
-rimLight.position.set(0, 2, 0);
-scene.add(rimLight);
 
 // Dice System
 function getDiceUVs(face) {
@@ -126,12 +125,15 @@ function createDie(x) {
     }
     const mesh = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({ map: diceTex }));
     mesh.castShadow = true; scene.add(mesh);
-    const body = new CANNON.Body({ mass: 0.05, linearDamping: 0.4, angularDamping: 0.4 });
+    const body = new CANNON.Body({ mass: 0, type: CANNON.Body.STATIC });
     body.addShape(new CANNON.Box(new CANNON.Vec3(0.3, 0.3, 0.3)));
-    body.position.set(x, 3, 0);
+    body.position.set(x, 2, 0);
+    body.linearDamping = 0.5;
+    body.angularDamping = 0.5;
     body.addEventListener('collide', (e) => {
         const v = Math.abs(e.contact.getImpactVelocityAlongNormal());
-        if (v > 0.5) audio?.playClack(v);
+        // FIX: Lower threshold for better clack sensitivity
+        if (v > 0.3) audio?.playClack(v);
     });
     world.addBody(body);
     return { mesh, body };
@@ -148,7 +150,8 @@ const UI = {
     turn: document.getElementById('current-turn'),
     drinks: document.getElementById('drinks-overlay'),
     doublesTitle: document.getElementById('doubles-title'),
-    btns: document.getElementById('recipient-buttons')
+    btns: document.getElementById('recipient-buttons'),
+    playerList: document.getElementById('player-list')
 };
 
 document.getElementById('init-btn').onclick = async () => {
@@ -166,16 +169,21 @@ document.getElementById('add-player-btn').onclick = () => {
     const i = document.getElementById('player-input');
     if (i.value.trim()) {
         players.push(i.value.trim());
-        document.getElementById('player-list').innerHTML = players.map((p, k) => `<div class='player-entry'><span>${p}</span><button onclick='players.splice(${k},1); this.parentElement.remove()'>X</button></div>`).join('');
+        renderSetup();
         i.value = '';
     }
 };
 
+function renderSetup() {
+    UI.playerList.innerHTML = players.map((p, k) => `<div class='player-entry'><span>${p}</span><button onclick='players.splice(${k},1); window.dispatchEvent(new Event("renderPlayers"))'>X</button></div>`).join('');
+}
+window.addEventListener('renderPlayers', renderSetup);
+
 document.getElementById('start-game-btn').onclick = () => {
     if (players.length < 2) return alert("Need 2+ players");
     UI.setup.classList.add('hidden');
-    gameState = 'READY';
-    updateHUD();
+    turnIdx = players.length - 1; 
+    nextTurn();
 };
 
 window.addEventListener('devicemotion', (e) => {
@@ -191,25 +199,37 @@ window.onmousedown = (e) => { if (gameState === 'READY' && e.target.tagName !== 
 function roll() {
     if (gameState !== 'READY' && gameState !== 'SLOPPY') return;
     gameState = 'ROLLING';
+    settleCounter = 0;
     UI.status.innerText = "ROLLING...";
     dice.forEach((d, i) => {
-        d.body.position.set(i===0?-0.5:0.5, 4, 0); d.body.velocity.set(0,0,0); d.body.angularVelocity.set(0,0,0);
-        d.body.applyImpulse(new CANNON.Vec3(Math.random()*4-2, 12, -5), new CANNON.Vec3(Math.random(), Math.random(), Math.random()));
+        // FIX: Explicitly wake body before switching type
+        d.body.wakeUp();
+        d.body.type = CANNON.Body.DYNAMIC;
+        d.body.mass = 0.05;
+        d.body.updateMassProperties();
+        d.body.position.set(i===0?-0.6:0.6, 4, 0); 
+        d.body.velocity.set(0,0,0); d.body.angularVelocity.set(0,0,0);
+        d.body.applyImpulse(new CANNON.Vec3(Math.random()*4-2, 12, -5), new CANNON.Vec3(Math.random()*0.1, 0.1, 0));
     });
 }
 
 function checkResults() {
     if (gameState !== 'ROLLING') return;
-    if (dice.every(d => d.body.velocity.length() < 0.02 && d.body.angularVelocity.length() < 0.02)) {
+    
+    // FIX: Multi-frame settlement check for jitter prevention
+    const currentlyStill = dice.every(d => d.body.velocity.length() < 0.05 && d.body.angularVelocity.length() < 0.05);
+    if (currentlyStill) {
+        settleCounter++;
+    } else {
+        settleCounter = 0;
+    }
+
+    if (settleCounter > 20) {
         gameState = 'RESULTS';
         audio.playThud();
         processRules(getFace(dice[0]), getFace(dice[1]));
     }
-    if (dice.some(d => d.body.position.y < -5)) {
-        gameState = 'SLOPPY';
-        UI.status.innerText = "SLOPPY! DRINK 2 & REROLL";
-        setTimeout(() => { if (gameState === 'SLOPPY') { gameState = 'READY'; roll(); } }, 3000);
-    }
+    if (dice.some(d => d.body.position.y < -5)) triggerSloppy();
 }
 
 function getFace(die) {
@@ -258,7 +278,14 @@ function nextTurn() {
     turnIdx = (turnIdx + 1) % players.length;
     gameState = 'READY';
     updateHUD();
-    UI.status.innerText = "SHAKE TO ROLL";
+    UI.status.innerText = `${players[turnIdx].toUpperCase()}\nSHAKE TO ROLL`;
+    
+    dice.forEach((d, i) => {
+        d.body.type = CANNON.Body.STATIC;
+        d.body.position.set(i===0?-0.6:0.6, 2, 0); 
+        d.body.velocity.set(0,0,0); d.body.angularVelocity.set(0,0,0);
+        d.body.quaternion.set(0,0,0,1);
+    });
 }
 
 function updateHUD() {
@@ -266,20 +293,39 @@ function updateHUD() {
     UI.turn.innerText = `TURN: ${players[turnIdx].toUpperCase()}`;
 }
 
+function triggerSloppy() {
+    gameState = 'SLOPPY';
+    UI.status.innerText = "SLOPPY! DRINK 2 & REROLL";
+    setTimeout(() => { if (gameState === 'SLOPPY') { gameState = 'READY'; roll(); } }, 3000);
+}
+
 const camTarget = new THREE.Vector3();
 function animate() {
     requestAnimationFrame(animate);
     if (gameState !== 'SPLASH' && gameState !== 'SETUP') {
-        world.fixedStep();
-        dice.forEach(d => { d.mesh.position.copy(d.body.position); d.mesh.quaternion.copy(d.body.quaternion); });
+        world.step(1/60, 1/60, 2);
+        dice.forEach(d => {
+            d.mesh.position.copy(d.body.position);
+            d.mesh.quaternion.copy(d.body.quaternion);
+        });
+        
         const midX = (dice[0].mesh.position.x + dice[1].mesh.position.x) / 2;
         const midZ = (dice[0].mesh.position.z + dice[1].mesh.position.z) / 2;
-        camTarget.set(midX * 0.5, 10, 10 + midZ * 0.5);
-        camera.position.lerp(camTarget, 0.05); camera.lookAt(midX * 0.2, 0, midZ * 0.2);
+        camTarget.set(Math.max(-2, Math.min(2, midX * 0.5)), 10, 10 + Math.max(-2, Math.min(2, midZ * 0.5)));
+        
+        // FIX: Frame-rate independent camera LERP
+        const lerpFactor = 1.0 - Math.pow(0.001, 1/60);
+        camera.position.lerp(camTarget, lerpFactor); 
+        camera.lookAt(midX * 0.2, 0, midZ * 0.2);
+        
         checkResults();
     }
     renderer.render(scene, camera);
 }
 animate();
 
-window.addEventListener('resize', () => { camera.aspect = window.innerWidth/window.innerHeight; camera.updateProjectionMatrix(); renderer.setSize(window.innerWidth, window.innerHeight); });
+window.addEventListener('resize', () => { 
+    camera.aspect = window.innerWidth/window.innerHeight; 
+    camera.updateProjectionMatrix(); 
+    renderer.setSize(window.innerWidth, window.innerHeight); 
+});
