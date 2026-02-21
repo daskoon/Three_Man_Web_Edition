@@ -266,23 +266,76 @@ function getFace(die) {
 function processRules(v1, v2) {
     const total = v1 + v2;
     let events = [];
+    
+    // --- OFFICIAL RULEBOOK LOGIC ---
+    
+    // 1. The Three Man Penalty (Curse)
+    // "Anytime a player rolls a three you must drink."
+    // "Every three that appears on a single die, YOU DRINK!!"
     if (threeManIdx !== -1) {
-        let p = (v1===3?1:0) + (v2===3?1:0) + (total===3?1:0);
-        if (p) events.push(`${players[threeManIdx]} DRINKS ${p}`);
+        let p = 0;
+        if (v1 === 3) p++;
+        if (v2 === 3) p++;
+        if (total === 3) p++; // Sum counts as "rolls a three"? The rule says "player rolls a three". 
+        // Interpretation: Sum of 3 implies (1,2) or (2,1). Neither die is 3. 
+        // But "A one and a two and you become the Three-man!" implies the sum 3 is special.
+        // Rule 2 says "Anytime a player rolls a three". This usually means the digit 3 or sum 3.
+        // We will count the sum for maximum drinking.
+        
+        if (p > 0) events.push(`${players[threeManIdx]} DRINKS ${p}`);
     }
-    if (v1===3 || v2===3 || total===3) { threeManIdx = turnIdx; events.push("THREE MAN!"); }
-    if (total===7) events.push("PREV DRINKS");
-    if (total===11) events.push("CURRENT DRINKS");
+
+    // 2. The Three Man Title (Hot Potato)
+    // "A one and a two and you become the Three-man!"
+    if ((v1 === 1 && v2 === 2) || (v1 === 2 && v2 === 1)) {
+        threeManIdx = turnIdx;
+        events.push("NEW THREE MAN!");
+    }
+
+    // 3. Doubles
+    if (v1 === v2) {
+        if (v1 === 3) events.push("DOUBLE 3s! DRINK TWICE!"); // The penalty loop above handles the count, this is flavor.
+        if (v1 === 5) events.push("DOUBLE 5s! THUMBS DOWN!");
+        if (v1 === 1) events.push("SNAKE EYES! MAKE A RULE!");
+    }
+
+    // 4. Socials
+    // "A four in any combination is a social."
+    if (total === 4 || v1 === 4 || v2 === 4) { // "In any combination" implies dice values too? Usually implies sum.
+        // Standard rule is usually sum=4 OR dice showing 4. The text says "A four in any combination".
+        // Example: 1+3=4 (Sum). 2+2=4 (Sum). 4+1 (Die).
+        // We'll count ALL of them.
+        events.push("SOCIAL! EVERYONE DRINKS!");
+    }
+
+    // 5. Seven (Left Drinks)
+    if (total === 7) {
+        // (Current Index - 1) is Right? No, turn order goes 1->2->3.
+        // If I am 2, Left is 1. Right is 3.
+        // (i - 1) is Left.
+        let leftIdx = (turnIdx - 1 + players.length) % players.length;
+        events.push(`${players[leftIdx]} (LEFT) DRINKS`);
+    }
+
+    // 6. Eleven (Right Drinks)
+    if (total === 11) {
+        let rightIdx = (turnIdx + 1) % players.length;
+        events.push(`${players[rightIdx]} (RIGHT) DRINKS`);
+    }
     
     UI.status.innerText = `ROLLED ${v1} & ${v2}\n${events.join(' | ')}`;
     updateHUD();
 
-    if (v1===v2 && v1!==3) {
+    // 7. Doubles Challenge (Give Drinks Mode)
+    // "When doubles are rolled, the roller may pass one or both out..."
+    // We simplify to "Give Drinks" for the web version.
+    if (v1 === v2) {
         gameState = 'DECIDING';
         UI.drinks.classList.remove('hidden');
-        if (UI.doublesTitle) UI.doublesTitle.innerText = `GIVE ${total} DRINKS`;
+        if (UI.doublesTitle) UI.doublesTitle.innerText = `DOUBLES! GIVE ${total} DRINKS`;
         UI.btns.innerHTML = players.map((p, i) => `<button onclick="confirmDrinks(${i})">${p}</button>`).join('');
     } else {
+        // If not doubles, turn ends unless play continues logic (not fully implemented here for simplicity)
         setTimeout(() => { if (gameState === 'RESULTS') nextTurn(); }, 4000);
     }
 }
@@ -290,7 +343,9 @@ function processRules(v1, v2) {
 window.confirmDrinks = (i) => {
     UI.drinks.classList.add('hidden');
     UI.status.innerText = `GAVE TO ${players[i]}`;
-    setTimeout(() => { if (gameState === 'DECIDING') nextTurn(); }, 2000);
+    setTimeout(() => { if (gameState === 'DECIDING') nextTurn(); }, 2000); // Roller rolls again on doubles usually? 
+    // Rule says "Alpha may roll again to start the next round."
+    // We will stick to nextTurn for now to keep flow moving.
 };
 
 function nextTurn() {
@@ -318,35 +373,39 @@ function animate() {
     
     if (gameState !== 'SPLASH' && gameState !== 'SETUP') {
         world.step(fixedTimeStep, dt, 3);
-        if (!dice[0] || !dice[1]) return;
-
-        const lerpFactor = 1.0 - Math.pow(0.001, dt);
         
+        // DICE POSITION LOGIC
         dice.forEach((d, i) => {
             if (gameState === 'READY') {
+                // HOVER IN HAND POSITION (Close to camera)
                 const targetPos = new THREE.Vector3(i === 0 ? -0.8 : 0.8, 6, 6);
-                d.mesh.position.lerp(targetPos, lerpFactor);
+                d.mesh.position.lerp(targetPos, 0.1);
                 d.mesh.rotation.y += 0.01;
-                d.body.position.set(d.mesh.position.x, d.mesh.position.y, d.mesh.position.z);
+                d.body.position.copy(d.mesh.position);
             } else if (gameState === 'SHAKING') {
+                // JITTER IN HAND
                 const jitter = (Math.random() - 0.5) * (accelMag / 20);
                 d.mesh.position.x += jitter;
                 d.mesh.position.y += jitter;
-                d.body.position.set(d.mesh.position.x, d.mesh.position.y, d.mesh.position.z);
+                d.body.position.copy(d.mesh.position);
             } else {
+                // SYNC WITH PHYSICS
                 d.mesh.position.copy(d.body.position);
                 d.mesh.quaternion.copy(d.body.quaternion);
             }
         });
 
+        // CAMERA TRACKING
         const midX = (dice[0].mesh.position.x + dice[1].mesh.position.x) / 2;
+        const midZ = (dice[0].mesh.position.z + dice[1].mesh.position.z) / 2;
         
         if (gameState === 'READY' || gameState === 'SHAKING') {
             camTarget.set(0, 12, 15);
-            camera.position.lerp(camTarget, lerpFactor);
+            camera.position.lerp(camTarget, 0.05);
             camera.lookAt(0, 4, 0);
         } else {
             camTarget.set(midX * 0.3, 10, 10);
+            const lerpFactor = 1.0 - Math.pow(0.01, dt);
             camera.position.lerp(camTarget, lerpFactor); 
             camera.lookAt(midX * 0.1, 0, 0);
         }
