@@ -12,7 +12,7 @@ export function setupPhysics() {
     const tableBody = new CANNON.Body({ mass: 0 });
     const tableShape = new CANNON.Cylinder(6.5, 6.5, 0.5, 32);
     tableBody.addShape(tableShape);
-    tableBody.position.set(0, -0.25, 0);
+    tableBody.position.set(0, 0, 0);
     world.addBody(tableBody);
 
     // High-Fidelity Collision Rails (Circular containment)
@@ -24,14 +24,15 @@ export function setupPhysics() {
         const angle = (i / numRails) * Math.PI * 2;
         const rail = new CANNON.Body({ mass: 0 });
         // Craps-style Pit: Rails are very tall and thick
-        const railShape = new CANNON.Box(new CANNON.Vec3(1.0, RAIL_HEIGHT / 2, 0.2));
+        // Rotated 90 degrees to form a continuous wall (1.0m thick)
+        const railShape = new CANNON.Box(new CANNON.Vec3(1.0, RAIL_HEIGHT / 2, 0.5));
         rail.addShape(railShape);
         rail.position.set(
             Math.cos(angle) * railRadius, 
             RAIL_HEIGHT / 2, 
             Math.sin(angle) * railRadius
         );
-        rail.quaternion.setFromAxisAngle(new CANNON.Vec3(0, 1, 0), -angle);
+        rail.quaternion.setFromAxisAngle(new CANNON.Vec3(0, 1, 0), -angle + Math.PI / 2);
         world.addBody(rail);
     }
 
