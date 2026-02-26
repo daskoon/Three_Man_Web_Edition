@@ -98,24 +98,23 @@ const nextTurn = () => {
 
 document.getElementById('init-btn').onclick = async () => {
     if (typeof DeviceMotionEvent !== 'undefined' && typeof DeviceMotionEvent.requestPermission === 'function') await DeviceMotionEvent.requestPermission();
-    audio = new DirectorAudio();
-    await audio.resume();
-    document.getElementById('splash-screen').classList.add('hidden');
-    document.getElementById('setup-screen').classList.remove('hidden');
-    gameState = 'SETUP';
-};
-
-document.getElementById('add-player-btn').onclick = () => {
-    // Task 3.3: Player Cap Enforcement
-    if (players.length >= 8) return alert("Max 8 players!");
-    const val = UI.playerInput.value.trim();
-    if (val) {
-        players.push(val);
-        UI.renderPlayers(players, (idx) => { players.splice(idx, 1); UI.renderPlayers(players, window.removePlayer); });
-        UI.playerInput.value = '';
-    }
-};
-
+        audio = new DirectorAudio();
+        await audio.resume();
+        UI.splash.classList.add('hidden');
+        UI.setup.classList.remove('hidden');
+        gameState = 'SETUP';
+    };
+    
+    document.getElementById('add-player-btn').onclick = () => {
+        // Task 3.3: Player Cap Enforcement
+        if (players.length >= 8) return alert("Max 8 players!");
+        const val = UI.playerInput.value.trim();
+        if (val) {
+            players.push(val);
+            UI.renderPlayers(players, window.removePlayer);
+            UI.playerInput.value = '';
+        }
+    };
 window.removePlayer = (idx) => {
     players.splice(idx, 1);
     UI.renderPlayers(players, window.removePlayer);

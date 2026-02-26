@@ -11,6 +11,7 @@ export function evaluateRules(v1, v2, players, turnIdx, threeManIdx) {
         if (v1 === 3) p++;
         if (v2 === 3) p++;
         // If the sum is 3 (1+2), it's a title change, but we'll add one drink if no die is 3.
+        // This satisfies the "Any roll of 3" penalty rule.
         if (total === 3) p++; 
         
         if (p > 0) {

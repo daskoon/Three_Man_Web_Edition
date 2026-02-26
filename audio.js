@@ -1,8 +1,6 @@
 export class DirectorAudio {
     constructor() {
         this.ctx = new (window.AudioContext || window.webkitAudioContext)();
-        this.slidingSource = null;
-        this.slidingGain = null;
     }
 
     async resume() {
