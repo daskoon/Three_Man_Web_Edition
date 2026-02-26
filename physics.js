@@ -8,11 +8,14 @@ export function setupPhysics() {
     world.defaultContactMaterial.friction = 0.5;
     world.defaultContactMaterial.restitution = 0.1; // Low bounciness
 
-    // Felt Table Surface (Increased radius for safety)
+    // Felt Table Surface (Properly oriented Y-up)
     const tableBody = new CANNON.Body({ mass: 0 });
     const tableShape = new CANNON.Cylinder(6.5, 6.5, 0.5, 32);
-    tableBody.addShape(tableShape);
-    tableBody.position.set(0, 0, 0);
+    // Cylinder is Z-aligned by default in Cannon-es, rotate to Y-aligned
+    const quat = new CANNON.Quaternion();
+    quat.setFromAxisAngle(new CANNON.Vec3(1, 0, 0), -Math.PI / 2);
+    tableBody.addShape(tableShape, new CANNON.Vec3(0, 0, 0), quat);
+    tableBody.position.set(0, -0.25, 0); // Top surface at y=0
     world.addBody(tableBody);
 
     const numRails = 32;

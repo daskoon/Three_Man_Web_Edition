@@ -56,11 +56,12 @@ scene.add(new THREE.Mesh(
     new THREE.CylinderGeometry(6, 6, 0.5, 64),
     new THREE.MeshStandardMaterial({ map: feltTex, roughness: 0.8 })
 ));
+// Visual Rim (Now matches physical walls)
 const rim = new THREE.Mesh(
-    new THREE.TorusGeometry(6.1, 0.3, 32, 64),
-    new THREE.MeshStandardMaterial({ map: woodTex, roughness: 0.4, metalness: 0.3 })
+    new THREE.CylinderGeometry(6.5, 6.5, 4.0, 64, 1, true),
+    new THREE.MeshStandardMaterial({ map: woodTex, roughness: 0.4, metalness: 0.3, side: THREE.DoubleSide, transparent: true, opacity: 0.2 })
 );
-rim.rotation.x = Math.PI / 2;
+rim.position.y = 2.0;
 scene.add(rim);
 
 // Debug: Visualize Collision Rails
@@ -177,28 +178,26 @@ function throwDice() {
     UI.setShame(false);
     
     dice.forEach((d, i) => {
-        d.body.position.set(d.mesh.position.x, d.mesh.position.y, d.mesh.position.z);
+        // Start throw from a more controlled height
+        d.body.position.set(i === 0 ? -1 : 1, 4, 5); 
         d.body.type = CANNON.Body.DYNAMIC;
-        d.body.mass = 0.05;
+        d.body.mass = 1.0; // Human-scale mass
         d.body.updateMassProperties();
         d.body.wakeUp();
 
-        // Control throw force: Moderate forward/downward throw
-        // Y: Moderate upward throw
-        // Z: Strong forward force to roll across table
-        // X: Slight randomness
+        // Control throw force: Forward drive toward center
         const force = new CANNON.Vec3(
-            (Math.random() - 0.5) * 0.1, 
-            0.3, 
-            -1.8
+            (Math.random() - 0.5) * 2, 
+            -2, // Downward slam for impact
+            -5  // Forward roll
         );
         d.body.applyImpulse(force, new CANNON.Vec3(0, 0, 0));
 
         // Add random spin for better tumbling
         d.body.angularVelocity.set(
-            Math.random() * 10 - 5,
-            Math.random() * 10 - 5,
-            Math.random() * 10 - 5
+            Math.random() * 20 - 10,
+            Math.random() * 20 - 10,
+            Math.random() * 20 - 10
         );
     });
     // Task 2.1: Snap pulse
