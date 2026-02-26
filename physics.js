@@ -43,9 +43,9 @@ export function setupPhysics() {
     world.addBody(groundBody);
 
     // WHAT: Circular Collision Rails (The "Cage").
-    // WHY: Scaled up to 9.5 radius to give dice more room to travel.
-    const numRails = 48; // Increased segments for larger circumference
-    const railRadius = 9.3;
+    // WHY: Scaled to 7.0 radius for better mobile perspective.
+    const numRails = 32;
+    const railRadius = 6.8;
     const RAIL_HEIGHT = 4.0; 
     for (let i = 0; i < numRails; i++) {
         const angle = (i / numRails) * Math.PI * 2;

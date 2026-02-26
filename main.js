@@ -88,25 +88,41 @@ const loader = new THREE.TextureLoader();
 const feltTex = loader.load('felt_albedo.png');
 const woodTex = loader.load('wood_albedo.png');
 
-// Visual Table
-scene.add(new THREE.Mesh(new THREE.CylinderGeometry(9, 9, 0.5, 64), new THREE.MeshStandardMaterial({ map: feltTex, roughness: 0.8 })));
-const rim = new THREE.Mesh(new THREE.CylinderGeometry(9.5, 9.5, 4.0, 64, 1, true), new THREE.MeshStandardMaterial({ map: woodTex, roughness: 0.4, metalness: 0.3, side: THREE.DoubleSide, transparent: true, opacity: 0.2 }));
-rim.position.y = 2.0; scene.add(rim);
+// Visual Table (Scaled to 7.0)
+scene.add(new THREE.Mesh(
+    new THREE.CylinderGeometry(7, 7, 0.5, 64),
+    new THREE.MeshStandardMaterial({ map: feltTex, roughness: 0.8 })
+));
+
+// Visual Rim (Scaled to 7.0)
+const rim = new THREE.Mesh(
+    new THREE.CylinderGeometry(7.2, 7.2, 4.0, 64, 1, true),
+    new THREE.MeshStandardMaterial({ 
+        map: woodTex, 
+        roughness: 0.4, 
+        metalness: 0.3, 
+        side: THREE.DoubleSide, 
+        transparent: true, 
+        opacity: 0.1 
+    })
+);
+rim.position.y = 2.0;
+scene.add(rim);
 
 // WHAT: Visual Floor Plane (Debug).
-// WHY: Set to invisible. Mechanics are sound at y=0.31, no need to see it.
+// WHY: Hidden.
 const debugFloor = new THREE.Mesh(
-    new THREE.PlaneGeometry(30, 30), 
+    new THREE.PlaneGeometry(20, 20), 
     new THREE.MeshBasicMaterial({ color: 0xff3333, transparent: true, opacity: 0.4, side: THREE.DoubleSide, visible: false })
 );
 debugFloor.rotation.x = -Math.PI / 2;
-debugFloor.position.y = 0.31; // Slightly above physics plane to ensure visibility
+debugFloor.position.y = 0.31; 
 scene.add(debugFloor);
 
-// Debug: Collision Cage Visualization (Gold Wireframe)
-const debugRailMat = new THREE.MeshBasicMaterial({ color: 0xffd700, transparent: true, opacity: 0.3, wireframe: true });
-const numRails = 48;
-const railRadius = 9.3;
+// Debug: Collision Cage Visualization (Hidden)
+const debugRailMat = new THREE.MeshBasicMaterial({ color: 0xffd700, transparent: true, opacity: 0.3, wireframe: true, visible: false });
+const numRails = 32;
+const railRadius = 6.8;
 const RAIL_HEIGHT = 4.0;
 for (let i = 0; i < numRails; i++) {
     const angle = (i / numRails) * Math.PI * 2;
@@ -147,7 +163,7 @@ function setupPlayerPresences() {
     });
     playerMeshes = [];
 
-    const radius = 12.0; // Pushed back to accommodate larger table
+    const radius = 10.0; // Scaled for 7.0 table
     const container = document.getElementById('ui-container');
 
     players.forEach((name, i) => {
@@ -340,7 +356,8 @@ function animate() {
 
         // --- POV CAMERA ORBIT ---
         const pMesh = playerMeshes[turnIdx].mesh;
-        const camPos = new THREE.Vector3(pMesh.position.x * 1.5, 6, pMesh.position.z * 1.5);
+        // Pushed back (2.2x) and higher (y=8) for mobile visibility
+        const camPos = new THREE.Vector3(pMesh.position.x * 2.2, 8, pMesh.position.z * 2.2);
         
         if (gameState === 'READY' || gameState === 'SHAKING' || gameState === 'CHALLENGE_READY') {
             camera.position.lerp(camPos, lerpFactor * 0.5);
@@ -352,7 +369,7 @@ function animate() {
             if (dice.every(d => d.body.velocity.length() < 0.05)) {
                 settleCounter++; if (settleCounter > 40) { resolveRoll(); }
             } else { settleCounter = 0; }
-            if (dice.some(d => Math.sqrt(d.body.position.x**2 + d.body.position.z**2) > 6.5)) triggerSloppy();
+            if (dice.some(d => Math.sqrt(d.body.position.x**2 + d.body.position.z**2) > 7.0)) triggerSloppy();
         } else {
             // Close-up on Results (Frame both dice)
             const distBetween = dice[0].mesh.position.distanceTo(dice[1].mesh.position);
