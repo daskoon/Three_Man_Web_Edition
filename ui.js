@@ -48,6 +48,21 @@ export const UI = {
         });
     },
 
+    showChallenge(players, confirmCallback) {
+        this.drinks.classList.remove('hidden');
+        this.doublesTitle.innerText = "PICK A CHALLENGER";
+        this.btns.innerHTML = players.map((p, i) => `
+            <button class="give-btn" data-idx="${i}">${p}</button>
+        `).join('');
+        
+        this.btns.querySelectorAll('.give-btn').forEach(btn => {
+            btn.onclick = () => {
+                this.drinks.classList.add('hidden');
+                confirmCallback(parseInt(btn.dataset.idx));
+            };
+        });
+    },
+
     hideDrinks() {
         this.drinks.classList.add('hidden');
     },

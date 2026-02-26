@@ -10,7 +10,9 @@ import { UI } from './ui.js';
 let players = [];
 let turnIdx = 0;
 let threeManIdx = -1;
-let gameState = 'SPLASH'; // SPLASH, SETUP, READY, SHAKING, ROLLING, RESULTS, DECIDING
+let isVirgin = true;
+let originalRollerIdx = -1;
+let gameState = 'SPLASH'; // SPLASH, SETUP, READY, SHAKING, ROLLING, RESULTS, DECIDING, CHALLENGE_READY
 let audio;
 let settleCounter = 0;
 let accelMag = 0;
@@ -90,6 +92,8 @@ const updateHUD = () => {
 
 const nextTurn = () => {
     turnIdx = (turnIdx + 1) % players.length;
+    isVirgin = true;
+    originalRollerIdx = -1;
     gameState = 'READY';
     updateHUD();
     UI.setStatus(`${players[turnIdx].toUpperCase()}\nSHAKE TO ROLL`);
@@ -98,12 +102,12 @@ const nextTurn = () => {
 
 document.getElementById('init-btn').onclick = async () => {
     if (typeof DeviceMotionEvent !== 'undefined' && typeof DeviceMotionEvent.requestPermission === 'function') await DeviceMotionEvent.requestPermission();
-        audio = new DirectorAudio();
-        await audio.resume();
-        UI.splash.classList.add('hidden');
-        UI.setup.classList.remove('hidden');
-        gameState = 'SETUP';
-    };
+    audio = new DirectorAudio();
+    await audio.resume();
+    UI.splash.classList.add('hidden');
+    UI.setup.classList.remove('hidden');
+    gameState = 'SETUP';
+};
     
     document.getElementById('add-player-btn').onclick = () => {
         // Task 3.3: Player Cap Enforcement
@@ -181,7 +185,7 @@ function throwDice() {
 }
 
 window.addEventListener('devicemotion', (e) => {
-    if (gameState !== 'READY' && gameState !== 'SHAKING') return;
+    if (gameState !== 'READY' && gameState !== 'SHAKING' && gameState !== 'CHALLENGE_READY') return;
     const a = e.accelerationIncludingGravity;
     if (!a) return;
     // Task 2.3: Tune magnitude calculation
@@ -189,7 +193,7 @@ window.addEventListener('devicemotion', (e) => {
     accelMag = accelMag * SENSOR_ALPHA + currentMag * (1 - SENSOR_ALPHA);
 
     if (accelMag > SHAKE_THRESHOLD) {
-        if (gameState === 'READY') {
+        if (gameState === 'READY' || gameState === 'CHALLENGE_READY') {
             gameState = 'SHAKING';
             // Task 2.1: Micro-pulse jitter
             vibrate([20, 20, 20, 20, 20]);
@@ -200,7 +204,7 @@ window.addEventListener('devicemotion', (e) => {
 });
 
 window.onmousedown = (e) => { 
-    if (gameState === 'READY' && e.target.tagName !== 'BUTTON') {
+    if ((gameState === 'READY' || gameState === 'CHALLENGE_READY') && e.target.tagName !== 'BUTTON') {
         gameState = 'SHAKING';
         setTimeout(throwDice, 800);
     }
@@ -214,7 +218,7 @@ function animate() {
     const lerpFactor = 1.0 - Math.pow(0.01, dt);
     
     if (gameState !== 'SPLASH' && gameState !== 'SETUP') {
-        world.step(fixedTimeStep, dt, 10);
+        world.step(fixedTimeStep, dt, 20);
         if (!dice[0] || !dice[1]) return;
         
         const midX = (dice[0].mesh.position.x + dice[1].mesh.position.x) / 2;
@@ -263,32 +267,53 @@ function animate() {
                     audio.playThud();
                     const v1 = getFace(dice[0].mesh);
                     const v2 = getFace(dice[1].mesh);
-                    const { events, newThreeManIdx, threeManPenalty } = evaluateRules(v1, v2, players, turnIdx, threeManIdx);
                     
-                    // Task 1.3: Shame Glow
-                    if (threeManPenalty) UI.setShame(true);
-                    
-                    // Task 2.2: Social Callout
-                    if (events.some(e => e.includes("SOCIAL"))) audio.playSocial();
-
-                    threeManIdx = newThreeManIdx;
-                    UI.setStatus(`ROLLED ${v1} & ${v2}\n${events.join(' | ')}`);
-                    updateHUD();
-                    
-                    if (v1 === v2) {
-                        gameState = 'DECIDING';
-                        UI.showDrinks(v1 * 2, players, (idx) => {
-                            UI.setStatus(`GAVE TO ${players[idx]}`);
-                            safeSetTimeout(nextTurn, 2000);
-                        });
+                    if (originalRollerIdx !== -1) {
+                        // Challenge Result
+                        const challengerWon = (v1 === v2);
+                        if (challengerWon) {
+                            UI.setStatus(`${players[turnIdx]} WON!\n${players[originalRollerIdx]} DRINKS EVERYTHING`);
+                        } else {
+                            UI.setStatus(`${players[turnIdx]} FAILED!\n${players[turnIdx]} DRINKS`);
+                        }
+                        turnIdx = originalRollerIdx;
+                        originalRollerIdx = -1;
+                        isVirgin = false;
+                        safeSetTimeout(() => { gameState = 'READY'; UI.setStatus("ROLL AGAIN"); }, 5000);
                     } else {
-                        safeSetTimeout(nextTurn, 5000);
+                        // Regular Result
+                        const { events, newThreeManIdx, threeManPenalty, isDoubles } = evaluateRules(v1, v2, players, turnIdx, threeManIdx, isVirgin);
+                        
+                        if (threeManPenalty) UI.setShame(true);
+                        if (events.some(e => e.includes("SOCIAL"))) audio.playSocial();
+
+                        threeManIdx = newThreeManIdx;
+                        UI.setStatus(`ROLLED ${v1} & ${v2}\n${events.join(' | ')}`);
+                        updateHUD();
+                        
+                        isVirgin = false;
+
+                        if (isDoubles) {
+                            gameState = 'DECIDING';
+                            UI.showChallenge(players, (idx) => {
+                                originalRollerIdx = turnIdx;
+                                turnIdx = idx;
+                                gameState = 'CHALLENGE_READY';
+                                UI.setStatus(`${players[turnIdx].toUpperCase()}\nSHAKE TO CHALLENGE`);
+                                updateHUD();
+                            });
+                        } else if (events.length > 0) {
+                             // Roll again on a hit
+                             safeSetTimeout(() => { gameState = 'READY'; UI.setStatus("ROLL AGAIN"); }, 3000);
+                        } else {
+                            safeSetTimeout(nextTurn, 5000);
+                        }
                     }
                 }
             } else { settleCounter = 0; }
             
             const dist = Math.sqrt(midX**2 + midZ**2);
-            if (dist > 6.5 || dice.some(d => d.body.position.y < -5)) triggerSloppy();
+            if (dist > 7.5 || dice.some(d => d.body.position.y < -5)) triggerSloppy();
         } else {
             camTarget.set(midX, 4, midZ + 2);
             camera.position.lerp(camTarget, lerpFactor);

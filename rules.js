@@ -1,16 +1,15 @@
-export function evaluateRules(v1, v2, players, turnIdx, threeManIdx) {
+export function evaluateRules(v1, v2, players, turnIdx, threeManIdx, isVirgin) {
     const total = v1 + v2;
     const events = [];
     let newThreeManIdx = threeManIdx;
     let threeManPenalty = false;
+    let isDoubles = v1 === v2;
 
     // 1. Three Man Penalty (Curse)
-    // Only counts die face 3s. Standard Three Man rules often separate die face from sum.
     if (threeManIdx !== -1) {
         let p = 0;
         if (v1 === 3) p++;
         if (v2 === 3) p++;
-        // If the sum is 3 (1+2), it's a title change, but we'll add one drink if no die is 3.
         // This satisfies the "Any roll of 3" penalty rule.
         if (total === 3) p++; 
         
@@ -27,10 +26,11 @@ export function evaluateRules(v1, v2, players, turnIdx, threeManIdx) {
     }
 
     // 3. Specials
-    if (v1 === v2) {
+    if (isDoubles) {
         if (v1 === 3) events.push("DOUBLE 3s!");
         if (v1 === 5) events.push("DOUBLE 5s! THUMBS!");
         if (v1 === 1) events.push("SNAKE EYES! RULE!");
+        events.push("DOUBLES! CHALLENGE!");
     }
 
     // 4. Socials & Neighbors
@@ -44,5 +44,10 @@ export function evaluateRules(v1, v2, players, turnIdx, threeManIdx) {
         events.push(`${players[right]} (RIGHT) DRINKS`);
     }
 
-    return { events, newThreeManIdx, total, threeManPenalty };
+    // 5. Virgin Roll (APK Scavenged Rule)
+    if (events.length === 0 && isVirgin) {
+        events.push("VIRGIN ROLL! DRINK 1 & GO AGAIN");
+    }
+
+    return { events, newThreeManIdx, total, threeManPenalty, isDoubles };
 }
