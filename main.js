@@ -67,7 +67,7 @@ scene.add(rim);
 const debugRailMat = new THREE.MeshBasicMaterial({ color: 0xff0000, transparent: true, opacity: 0.3, wireframe: true });
 const numRails = 32;
 const railRadius = 6.3;
-const RAIL_HEIGHT = 4.0;
+const RAIL_HEIGHT = 1.2;
 for (let i = 0; i < numRails; i++) {
     const angle = (i / numRails) * Math.PI * 2;
     const mesh = new THREE.Mesh(
