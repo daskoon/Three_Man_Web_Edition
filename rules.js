@@ -2,6 +2,7 @@ export function evaluateRules(v1, v2, players, turnIdx, threeManIdx) {
     const total = v1 + v2;
     const events = [];
     let newThreeManIdx = threeManIdx;
+    let threeManPenalty = false;
 
     // 1. Three Man Penalty (Curse)
     // Only counts die face 3s. Standard Three Man rules often separate die face from sum.
@@ -12,7 +13,10 @@ export function evaluateRules(v1, v2, players, turnIdx, threeManIdx) {
         // If the sum is 3 (1+2), it's a title change, but we'll add one drink if no die is 3.
         if (total === 3) p++; 
         
-        if (p > 0) events.push(`${players[threeManIdx]} DRINKS ${p}`);
+        if (p > 0) {
+            events.push(`${players[threeManIdx]} DRINKS ${p}`);
+            threeManPenalty = true;
+        }
     }
 
     // 2. Three Man Title (Hot Potato)
@@ -39,5 +43,5 @@ export function evaluateRules(v1, v2, players, turnIdx, threeManIdx) {
         events.push(`${players[right]} (RIGHT) DRINKS`);
     }
 
-    return { events, newThreeManIdx, total };
+    return { events, newThreeManIdx, total, threeManPenalty };
 }

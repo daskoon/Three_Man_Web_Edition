@@ -18,6 +18,17 @@ let gameTimer = null;
 const clock = new THREE.Clock();
 const fixedTimeStep = 1 / 60;
 
+// Task 2.3: Weighty feel constants
+const SHAKE_THRESHOLD = 22;
+const RELEASE_THRESHOLD = 15;
+const SENSOR_ALPHA = 0.7; // Snappier response (was 0.85)
+
+const vibrate = (pattern) => {
+    if (typeof navigator !== 'undefined' && typeof navigator.vibrate === 'function') {
+        navigator.vibrate(pattern);
+    }
+};
+
 const safeSetTimeout = (fn, delay) => {
     clearTimeout(gameTimer);
     gameTimer = setTimeout(fn, delay);
@@ -82,18 +93,21 @@ const nextTurn = () => {
     gameState = 'READY';
     updateHUD();
     UI.setStatus(`${players[turnIdx].toUpperCase()}\nSHAKE TO ROLL`);
+    UI.setShame(false);
 };
 
 document.getElementById('init-btn').onclick = async () => {
     if (typeof DeviceMotionEvent !== 'undefined' && typeof DeviceMotionEvent.requestPermission === 'function') await DeviceMotionEvent.requestPermission();
     audio = new DirectorAudio();
     await audio.resume();
-    UI.splash.classList.add('hidden');
-    UI.setup.classList.remove('hidden');
+    document.getElementById('splash-screen').classList.add('hidden');
+    document.getElementById('setup-screen').classList.remove('hidden');
     gameState = 'SETUP';
 };
 
 document.getElementById('add-player-btn').onclick = () => {
+    // Task 3.3: Player Cap Enforcement
+    if (players.length >= 8) return alert("Max 8 players!");
     const val = UI.playerInput.value.trim();
     if (val) {
         players.push(val);
@@ -102,10 +116,16 @@ document.getElementById('add-player-btn').onclick = () => {
     }
 };
 
+window.removePlayer = (idx) => {
+    players.splice(idx, 1);
+    UI.renderPlayers(players, window.removePlayer);
+};
+
 const startGame = () => {
     UI.setup.classList.add('hidden');
     turnIdx = players.length - 1; 
     nextTurn();
+    if (audio) audio.startSliding();
 };
 
 document.getElementById('start-game-btn').onclick = () => {
@@ -115,7 +135,11 @@ document.getElementById('start-game-btn').onclick = () => {
 
 document.getElementById('quick-play-btn').onclick = () => {
     const legends = ["SKOON", "FACE", "RICH", "BLAZE", "ROB", "CRUSTY", "BM", "SHADOW"];
-    const shuffled = [...legends].sort(() => 0.5 - Math.random()); // Standard shuffle here is fine for quickplay
+    const shuffled = [...legends];
+    for (let i = shuffled.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+    }
     players = shuffled.slice(0, 5);
     startGame();
 };
@@ -126,6 +150,7 @@ function throwDice() {
     gameState = 'ROLLING';
     settleCounter = 0;
     UI.setStatus("THROW!");
+    UI.setShame(false);
     
     dice.forEach((d, i) => {
         d.body.position.set(d.mesh.position.x, d.mesh.position.y, d.mesh.position.z);
@@ -133,20 +158,44 @@ function throwDice() {
         d.body.mass = 0.05;
         d.body.updateMassProperties();
         d.body.wakeUp();
-        const force = new CANNON.Vec3(Math.random()*0.4 - 0.2, 0.5, -3);
-        d.body.applyImpulse(force, new CANNON.Vec3(Math.random()*0.01, 0.01, Math.random()*0.01));       
+
+        // Control throw force: Moderate forward/downward throw
+        // Y: Moderate upward throw
+        // Z: Strong forward force to roll across table
+        // X: Slight randomness
+        const force = new CANNON.Vec3(
+            (Math.random() - 0.5) * 0.1, 
+            0.3, 
+            -1.8
+        );
+        d.body.applyImpulse(force, new CANNON.Vec3(0, 0, 0));
+
+        // Add random spin for better tumbling
+        d.body.angularVelocity.set(
+            Math.random() * 10 - 5,
+            Math.random() * 10 - 5,
+            Math.random() * 10 - 5
+        );
     });
-    if (navigator.vibrate) navigator.vibrate(150);
+    // Task 2.1: Snap pulse
+    vibrate(150);
 }
 
 window.addEventListener('devicemotion', (e) => {
     if (gameState !== 'READY' && gameState !== 'SHAKING') return;
     const a = e.accelerationIncludingGravity;
     if (!a) return;
-    accelMag = Math.sqrt(a.x**2 + a.y**2 + a.z**2);
-    if (accelMag > 22) {
-        if (gameState === 'READY') gameState = 'SHAKING';
-    } else if (gameState === 'SHAKING' && accelMag < 15) {
+    // Task 2.3: Tune magnitude calculation
+    const currentMag = Math.sqrt(a.x**2 + a.y**2 + a.z**2);
+    accelMag = accelMag * SENSOR_ALPHA + currentMag * (1 - SENSOR_ALPHA);
+
+    if (accelMag > SHAKE_THRESHOLD) {
+        if (gameState === 'READY') {
+            gameState = 'SHAKING';
+            // Task 2.1: Micro-pulse jitter
+            vibrate([20, 20, 20, 20, 20]);
+        }
+    } else if (gameState === 'SHAKING' && accelMag < RELEASE_THRESHOLD) {
         throwDice();
     }
 });
@@ -166,12 +215,14 @@ function animate() {
     const lerpFactor = 1.0 - Math.pow(0.01, dt);
     
     if (gameState !== 'SPLASH' && gameState !== 'SETUP') {
-        // High-precision sub-stepping (survive mobile hiccups)
         world.step(fixedTimeStep, dt, 10);
         if (!dice[0] || !dice[1]) return;
         
         const midX = (dice[0].mesh.position.x + dice[1].mesh.position.x) / 2;
         const midZ = (dice[0].mesh.position.z + dice[1].mesh.position.z) / 2;
+        
+        const totalVel = dice[0].body.velocity.length() + dice[1].body.velocity.length();
+        if (audio) audio.updateSliding(totalVel);
 
         dice.forEach((d, i) => {
             if (gameState === 'READY') {
@@ -179,10 +230,13 @@ function animate() {
                 d.mesh.position.lerp(targetPos, lerpFactor);
                 d.mesh.scale.lerp(new THREE.Vector3(1, 1, 1), lerpFactor);
                 d.mesh.rotation.y += 0.01;
+                d.body.position.set(d.mesh.position.x, d.mesh.position.y, d.mesh.position.z);
             } else if (gameState === 'SHAKING') {
-                // Normalized jitter across refresh rates
-                const jitter = (Math.random() - 0.5) * (accelMag / 20) * (dt * 60);
+                // Task 2.1: Jitter scaled by normalized mag
+                const jitterAmount = (accelMag / SHAKE_THRESHOLD) * 0.1;
+                const jitter = (Math.random() - 0.5) * jitterAmount * (dt * 60);
                 d.mesh.position.x += jitter; d.mesh.position.y += jitter;
+                d.body.position.set(d.mesh.position.x, d.mesh.position.y, d.mesh.position.z);
             } else if (gameState === 'ROLLING') {
                 d.mesh.scale.lerp(new THREE.Vector3(0.5, 0.5, 0.5), lerpFactor * 0.5);
                 d.mesh.position.copy(d.body.position);
@@ -194,7 +248,6 @@ function animate() {
             }
         });
 
-        // Camera Management
         if (gameState === 'READY' || gameState === 'SHAKING') {
             camTarget.set(0, 12, 15);
             camera.position.lerp(camTarget, lerpFactor);
@@ -204,7 +257,6 @@ function animate() {
             camera.position.lerp(camTarget, lerpFactor); 
             camera.lookAt(midX * 0.1, 0, 0);
             
-            // Check for settlement
             if (dice.every(d => d.body.velocity.length() < 0.05 && d.body.angularVelocity.length() < 0.05)) {
                 settleCounter++;
                 if (settleCounter > 40) {
@@ -212,7 +264,14 @@ function animate() {
                     audio.playThud();
                     const v1 = getFace(dice[0].mesh);
                     const v2 = getFace(dice[1].mesh);
-                    const { events, newThreeManIdx } = evaluateRules(v1, v2, players, turnIdx, threeManIdx);
+                    const { events, newThreeManIdx, threeManPenalty } = evaluateRules(v1, v2, players, turnIdx, threeManIdx);
+                    
+                    // Task 1.3: Shame Glow
+                    if (threeManPenalty) UI.setShame(true);
+                    
+                    // Task 2.2: Social Callout
+                    if (events.some(e => e.includes("SOCIAL"))) audio.playSocial();
+
                     threeManIdx = newThreeManIdx;
                     UI.setStatus(`ROLLED ${v1} & ${v2}\n${events.join(' | ')}`);
                     updateHUD();
@@ -229,16 +288,8 @@ function animate() {
                 }
             } else { settleCounter = 0; }
             
-            // Sloppy Check
             const dist = Math.sqrt(midX**2 + midZ**2);
-            if (dist > 6.5 || dice.some(d => d.body.position.y < -5)) {
-                gameState = 'SLOPPY';
-                UI.setStatus("SLOPPY! DRINK 2 & REROLL");
-                safeSetTimeout(() => { 
-                    gameState = 'READY'; 
-                    nextTurn(); turnIdx = (turnIdx - 1 + players.length) % players.length;
-                }, 3000);
-            }
+            if (dist > 6.5 || dice.some(d => d.body.position.y < -5)) triggerSloppy();
         } else {
             camTarget.set(midX, 4, midZ + 2);
             camera.position.lerp(camTarget, lerpFactor);
@@ -246,6 +297,22 @@ function animate() {
         }
     }
     renderer.render(scene, camera);
+}
+
+function triggerSloppy() {
+    if (gameState === 'SLOPPY') return;
+    gameState = 'SLOPPY';
+    UI.setStatus("SLOPPY! DRINK 2 & REROLL");
+    
+    // Task 2.1: Womp Womp pattern
+    vibrate([400, 200, 400, 200, 400]);
+
+    safeSetTimeout(() => { 
+        if (gameState === 'SLOPPY') { 
+            gameState = 'READY'; 
+            nextTurn(); turnIdx = (turnIdx - 1 + players.length) % players.length;
+        } 
+    }, 3000);
 }
 
 animate();

@@ -3,6 +3,7 @@ export const UI = {
     setup: document.getElementById('setup-screen'),
     status: document.getElementById('action-text'),
     threeMan: document.getElementById('current-3man'),
+    threeManBadge: document.getElementById('three-man-badge'),
     turn: document.getElementById('current-turn'),
     drinks: document.getElementById('drinks-overlay'),
     doublesTitle: document.getElementById('doubles-title'),
@@ -49,5 +50,10 @@ export const UI = {
 
     hideDrinks() {
         this.drinks.classList.add('hidden');
+    },
+
+    setShame(active) {
+        if (active) this.threeManBadge.classList.add('shame-glow');
+        else this.threeManBadge.classList.remove('shame-glow');
     }
 };
