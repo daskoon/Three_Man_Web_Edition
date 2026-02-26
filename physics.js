@@ -15,15 +15,13 @@ export function setupPhysics() {
     tableBody.position.set(0, -0.25, 0);
     world.addBody(tableBody);
 
-    // High-Fidelity Collision Rails (Circular containment)
-    // We use a ring of boxes to simulate the table rim
     const numRails = 32;
     const railRadius = 6.3;
-    const RAIL_HEIGHT = 4.0;
+    const RAIL_HEIGHT = 1.2;
     for (let i = 0; i < numRails; i++) {
         const angle = (i / numRails) * Math.PI * 2;
         const rail = new CANNON.Body({ mass: 0 });
-        // Craps-style Pit: Rails are very tall and thick
+        // Standard Rim: Tall enough to catch rolls, low enough for 'Sloppy' mistakes
         const railShape = new CANNON.Box(new CANNON.Vec3(1.0, RAIL_HEIGHT / 2, 0.2));
         rail.addShape(railShape);
         rail.position.set(

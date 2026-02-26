@@ -313,7 +313,7 @@ function animate() {
             } else { settleCounter = 0; }
             
             const dist = Math.sqrt(midX**2 + midZ**2);
-            if (dist > 7.5 || dice.some(d => d.body.position.y < -5)) triggerSloppy();
+            if (dist > 6.5 || dice.some(d => d.body.position.y < -5)) triggerSloppy();
         } else {
             camTarget.set(midX, 4, midZ + 2);
             camera.position.lerp(camTarget, lerpFactor);
