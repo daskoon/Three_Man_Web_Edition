@@ -17,7 +17,7 @@ export function setupPhysics() {
 
     const numRails = 32;
     const railRadius = 6.3;
-    const RAIL_HEIGHT = 1.2;
+    const RAIL_HEIGHT = 4.0;
     for (let i = 0; i < numRails; i++) {
         const angle = (i / numRails) * Math.PI * 2;
         const rail = new CANNON.Body({ mass: 0 });
