@@ -1,3 +1,15 @@
+/**
+ * @file main.js
+ * @description The "Director's Cut" Orchestrator.
+ * 
+ * WHAT: This is the entry point of the application. It synchronizes the Three.js renderer, 
+ * the Cannon-es physics world, the synthetic audio engine, and the rule evaluator.
+ * 
+ * WHY: To create a "VIP Lounge" drinking experience with "Hand of God" physics interaction.
+ * 
+ * HOW: 1. Setup 3D Scene -> 2. Initialize Physics -> 3. Run Animation Loop -> 4. Evaluate Rules.
+ */
+
 import * as THREE from 'three';
 import * as CANNON from 'cannon-es';
 import { DirectorAudio } from './audio.js';
@@ -6,7 +18,10 @@ import { setupPhysics, createDieBody } from './physics.js';
 import { evaluateRules } from './rules.js';
 import { UI } from './ui.js';
 
-// --- LOGGING ---
+// --- LOGGING SYSTEM ---
+// WHAT: Global Game Logger.
+// WHY: To track "Sloppy" rolls and physics breaches for the Boss's workflow.
+// HOW: Captures every frame of interest and exports to a timestamped file.
 const gameLogs = [];
 const log = (msg) => {
     const t = new Date().toLocaleTimeString();
@@ -14,7 +29,28 @@ const log = (msg) => {
     console.log(msg);
 };
 
-// --- STATE ---
+/**
+ * WHAT: Log Exporter & Truncator.
+ * WHY: Downloads the current log history and then CLEARS it for the next debug session.
+ * HOW: Creates a Blob and generates a time-of-day filename.
+ */
+UI.initLogButton(() => {
+    const now = new Date();
+    const timeStr = now.toTimeString().split(' ')[0].replace(/:/g, '-');
+    const filename = `3man-log-${timeStr}.txt`;
+    
+    const blob = new Blob([gameLogs.join('\n')], { type: 'text/plain' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = filename;
+    a.click();
+    
+    // Truncate logs after download for the next session
+    gameLogs.length = 0;
+    log("LOGS TRUNCATED - SESSION RESET");
+});
+
+// --- GAME STATE ---
 let players = [];
 let turnIdx = 0;
 let threeManIdx = -1;
@@ -26,20 +62,15 @@ let settleCounter = 0;
 let accelMag = 0;
 let gameTimer = null;
 const clock = new THREE.Clock();
+
+// WHAT: Physics Precision (Jules' High-Precision Fix).
+// WHY: High sub-stepping prevents dice from passing through walls at high speeds.
 const fixedTimeStep = 1 / 120;
 
-UI.initLogButton(() => {
-    const blob = new Blob([gameLogs.join('\n')], { type: 'text/plain' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url; a.download = `3man-logs-${Date.now()}.txt`;
-    a.click();
-});
-
-// Task 2.3: Weighty feel constants
+// WHAT: Interaction Constants.
 const SHAKE_THRESHOLD = 22;
 const RELEASE_THRESHOLD = 15;
-const SENSOR_ALPHA = 0.7; // Snappier response (was 0.85)
+const SENSOR_ALPHA = 0.7; 
 
 const vibrate = (pattern) => {
     if (typeof navigator !== 'undefined' && typeof navigator.vibrate === 'function') {
@@ -52,11 +83,15 @@ const safeSetTimeout = (fn, delay) => {
     gameTimer = setTimeout(fn, delay);
 };
 
-// --- 3D ENGINE ---
+// --- 3D ENGINE INITIALIZATION ---
 const scene = new THREE.Scene();
 scene.fog = new THREE.FogExp2(0x050505, 0.02);
 const camera = new THREE.PerspectiveCamera(40, window.innerWidth / window.innerHeight, 0.1, 100);
-const renderer = new THREE.WebGLRenderer({ canvas: document.getElementById('game-canvas'), antialias: true, alpha: true });
+const renderer = new THREE.WebGLRenderer({ 
+    canvas: document.getElementById('game-canvas'), 
+    antialias: true, 
+    alpha: true 
+});
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 renderer.shadowMap.enabled = true;
@@ -67,35 +102,36 @@ const loader = new THREE.TextureLoader();
 const feltTex = loader.load('felt_albedo.png');
 const woodTex = loader.load('wood_albedo.png');
 
-// Visual Table
+// Visual Table Setup
 scene.add(new THREE.Mesh(
     new THREE.CylinderGeometry(6, 6, 0.5, 64),
     new THREE.MeshStandardMaterial({ map: feltTex, roughness: 0.8 })
 ));
-// Visual Rim (Now matches physical walls)
+
+// Visual Rim (Synchronized with Jules' 4.0m physical walls)
 const rim = new THREE.Mesh(
     new THREE.CylinderGeometry(6.5, 6.5, 4.0, 64, 1, true),
-    new THREE.MeshStandardMaterial({ map: woodTex, roughness: 0.4, metalness: 0.3, side: THREE.DoubleSide, transparent: true, opacity: 0.2 })
+    new THREE.MeshStandardMaterial({ 
+        map: woodTex, 
+        roughness: 0.4, 
+        metalness: 0.3, 
+        side: THREE.DoubleSide, 
+        transparent: true, 
+        opacity: 0.2 
+    })
 );
 rim.position.y = 2.0;
 scene.add(rim);
 
-// Debug: Visualize Collision Rails
+// Debug: Visible Collision Cage (Gold Wireframe)
 const debugRailMat = new THREE.MeshBasicMaterial({ color: 0xffd700, transparent: true, opacity: 0.5, wireframe: true });
 const numRails = 32;
 const railRadius = 6.3;
 const RAIL_HEIGHT = 4.0;
 for (let i = 0; i < numRails; i++) {
     const angle = (i / numRails) * Math.PI * 2;
-    const mesh = new THREE.Mesh(
-        new THREE.BoxGeometry(2.0, RAIL_HEIGHT, 1.0), // Full extent (2x half-extent)
-        debugRailMat
-    );
-    mesh.position.set(
-        Math.cos(angle) * railRadius,
-        RAIL_HEIGHT / 2,
-        Math.sin(angle) * railRadius
-    );
+    const mesh = new THREE.Mesh(new THREE.BoxGeometry(2.0, RAIL_HEIGHT, 1.0), debugRailMat);
+    mesh.position.set(Math.cos(angle) * railRadius, RAIL_HEIGHT / 2, Math.sin(angle) * railRadius);
     mesh.quaternion.setFromAxisAngle(new THREE.Vector3(0, 1, 0), -angle + Math.PI / 2);
     scene.add(mesh);
 }
@@ -122,7 +158,7 @@ const dice = [
 ];
 dice.forEach(d => { d.mesh.castShadow = true; scene.add(d.mesh); });
 
-// --- UI LOGIC ---
+// --- GAMEPLAY FLOW ---
 const updateHUD = () => {
     UI.updateHUD(players[turnIdx], threeManIdx === -1 ? null : players[threeManIdx]);
 };
@@ -137,6 +173,7 @@ const nextTurn = () => {
     UI.setShame(false);
 };
 
+// --- EVENT HANDLERS ---
 document.getElementById('init-btn').onclick = async () => {
     if (typeof DeviceMotionEvent !== 'undefined' && typeof DeviceMotionEvent.requestPermission === 'function') await DeviceMotionEvent.requestPermission();
     audio = new DirectorAudio();
@@ -147,7 +184,6 @@ document.getElementById('init-btn').onclick = async () => {
 };
     
 document.getElementById('add-player-btn').onclick = () => {
-    // Task 3.3: Player Cap Enforcement
     if (players.length >= 8) return alert("Max 8 players!");
     const val = UI.playerInput.value.trim();
     if (val) {
@@ -179,19 +215,21 @@ document.getElementById('quick-play-btn').onclick = () => {
     const shuffled = [...legends];
     for (let i = shuffled.length - 1; i > 0; i--) {
         const j = Math.floor(Math.random() * (i + 1));
-        [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+        [shuffled[j], shuffled[i]] = [shuffled[i], shuffled[j]];
     }
     players = shuffled.slice(0, 5);
     startGame();
 };
 
-// --- CORE LOGIC ---
+/**
+ * WHAT: The Dice Throw.
+ * WHY: Triggers the physics body to become dynamic and applies the "Hand of God" impulse.
+ * HOW: Moves body to mesh pos, sets mass=1.0, and applies a randomized forward vector.
+ */
 function throwDice() {
     if (gameState !== 'SHAKING') return;
     
-    // Truncate logs for new throw
-    gameLogs.length = 0;
-    log(`New Throw by ${players[turnIdx]}`);
+    log(`--- NEW ROLL BY ${players[turnIdx]} ---`);
 
     gameState = 'ROLLING';
     settleCounter = 0;
@@ -199,44 +237,36 @@ function throwDice() {
     UI.setShame(false);
     
     dice.forEach((d, i) => {
-        // Start throw from a stable position
         d.body.position.set(i === 0 ? -1 : 1, 4, 0); 
         d.body.type = CANNON.Body.DYNAMIC;
         d.body.mass = 1.0; 
         d.body.updateMassProperties();
         d.body.wakeUp();
 
-        // Control throw force: Forward drive toward center
+        // Control throw force: Forward slam drive
         const force = new CANNON.Vec3(
             (Math.random() - 0.5) * 2, 
-            -5, // Downward slam for impact
-            -8  // Forward roll
+            -5, // Downward slam to prevent flying over walls
+            -8  // Strong forward drive for clacking against the rim
         );
         d.body.applyImpulse(force, new CANNON.Vec3(0, 0, 0));
 
-        // Add random spin for better tumbling
-        d.body.angularVelocity.set(
-            Math.random() * 20 - 10,
-            Math.random() * 20 - 10,
-            Math.random() * 20 - 10
-        );
+        d.body.angularVelocity.set(Math.random() * 20 - 10, Math.random() * 20 - 10, Math.random() * 20 - 10);
     });
-    // Task 2.1: Snap pulse
     vibrate(150);
 }
 
+// Interaction Listeners (Accelerometer + Click fallback)
 window.addEventListener('devicemotion', (e) => {
     if (gameState !== 'READY' && gameState !== 'SHAKING' && gameState !== 'CHALLENGE_READY') return;
     const a = e.accelerationIncludingGravity;
     if (!a) return;
-    // Task 2.3: Tune magnitude calculation
     const currentMag = Math.sqrt(a.x**2 + a.y**2 + a.z**2);
     accelMag = accelMag * SENSOR_ALPHA + currentMag * (1 - SENSOR_ALPHA);
 
     if (accelMag > SHAKE_THRESHOLD) {
         if (gameState === 'READY' || gameState === 'CHALLENGE_READY') {
             gameState = 'SHAKING';
-            // Task 2.1: Micro-pulse jitter
             vibrate([20, 20, 20, 20, 20]);
         }
     } else if (gameState === 'SHAKING' && accelMag < RELEASE_THRESHOLD) {
@@ -251,7 +281,7 @@ window.onmousedown = (e) => {
     }
 };
 
-// --- ANIMATION LOOP ---
+// --- THE MASTER LOOP ---
 const camTarget = new THREE.Vector3();
 function animate() {
     requestAnimationFrame(animate);
@@ -259,6 +289,8 @@ function animate() {
     const lerpFactor = 1.0 - Math.pow(0.01, dt);
     
     if (gameState !== 'SPLASH' && gameState !== 'SETUP') {
+        // WHAT: Physics Update.
+        // WHY: Fixed time step ensures deterministic collisions.
         world.step(fixedTimeStep, dt, 20);
         if (!dice[0] || !dice[1]) return;
         
@@ -268,29 +300,24 @@ function animate() {
         const totalVel = dice[0].body.velocity.length() + dice[1].body.velocity.length();
         if (audio) audio.updateSliding(totalVel);
 
-            // Debug: Log excessive velocities or escapes
-            dice.forEach((d, i) => {
-                const vel = d.body.velocity.length();
-                const pos = d.body.position;
-                if (vel > 40) log(`[WARN] Extreme Velocity Die ${i}: ${vel.toFixed(2)}`);
-                if (Math.sqrt(pos.x**2 + pos.z**2) > 6.5) {
-                    log(`[ALERT] Die ${i} Breach! Pos: (${pos.x.toFixed(2)}, ${pos.y.toFixed(2)}, ${pos.z.toFixed(2)}) Vel: ${vel.toFixed(2)}`);
-                }
-                if (pos.y < -1) log(`[CRITICAL] Die ${i} fell through floor! y: ${pos.y.toFixed(2)}`);
-            });
+        // --- TRACKING & DEBUG LOGS ---
+        dice.forEach((d, i) => {
+            const vel = d.body.velocity.length();
+            const pos = d.body.position;
+            if (vel > 40) log(`[WARN] Extreme Velocity Die ${i}: ${vel.toFixed(2)}`);
+            if (Math.sqrt(pos.x**2 + pos.z**2) > 6.5) {
+                log(`[ALERT] Die ${i} Breach! Pos: (${pos.x.toFixed(2)}, ${pos.y.toFixed(2)}, ${pos.z.toFixed(2)}) Vel: ${vel.toFixed(2)}`);
+            }
+            if (pos.y < -1) log(`[CRITICAL] Die ${i} fell through Infinite Plane! y: ${pos.y.toFixed(2)}`);
+        });
 
+        // Sync Rendering with Physics
         dice.forEach((d, i) => {
             if (gameState === 'READY') {
                 const targetPos = new THREE.Vector3(i === 0 ? -0.8 : 0.8, 6, 6);
                 d.mesh.position.lerp(targetPos, lerpFactor);
                 d.mesh.scale.lerp(new THREE.Vector3(1, 1, 1), lerpFactor);
                 d.mesh.rotation.y += 0.01;
-                d.body.position.set(d.mesh.position.x, d.mesh.position.y, d.mesh.position.z);
-            } else if (gameState === 'SHAKING') {
-                // Task 2.1: Jitter scaled by normalized mag
-                const jitterAmount = (accelMag / SHAKE_THRESHOLD) * 0.1;
-                const jitter = (Math.random() - 0.5) * jitterAmount * (dt * 60);
-                d.mesh.position.x += jitter; d.mesh.position.y += jitter;
                 d.body.position.set(d.mesh.position.x, d.mesh.position.y, d.mesh.position.z);
             } else if (gameState === 'ROLLING') {
                 d.mesh.scale.lerp(new THREE.Vector3(0.5, 0.5, 0.5), lerpFactor * 0.5);
@@ -303,6 +330,7 @@ function animate() {
             }
         });
 
+        // Camera Logic: Follow the action
         if (gameState === 'READY' || gameState === 'SHAKING') {
             camTarget.set(0, 12, 15);
             camera.position.lerp(camTarget, lerpFactor);
@@ -312,6 +340,7 @@ function animate() {
             camera.position.lerp(camTarget, lerpFactor); 
             camera.lookAt(midX * 0.1, 0, 0);
             
+            // Check for Settle
             if (dice.every(d => d.body.velocity.length() < 0.05 && d.body.angularVelocity.length() < 0.05)) {
                 settleCounter++;
                 if (settleCounter > 40) {
@@ -321,7 +350,7 @@ function animate() {
                     const v2 = getFace(dice[1].mesh);
                     
                     if (originalRollerIdx !== -1) {
-                        // Challenge Result
+                        // Challenge Resolution
                         const challengerWon = (v1 === v2);
                         if (challengerWon) {
                             UI.setStatus(`${players[turnIdx]} WON!\n${players[originalRollerIdx]} DRINKS EVERYTHING`);
@@ -333,7 +362,7 @@ function animate() {
                         isVirgin = false;
                         safeSetTimeout(() => { gameState = 'READY'; UI.setStatus("ROLL AGAIN"); }, 5000);
                     } else {
-                        // Regular Result
+                        // Standard Resolution
                         const { events, newThreeManIdx, threeManPenalty, isDoubles } = evaluateRules(v1, v2, players, turnIdx, threeManIdx, isVirgin);
                         
                         if (threeManPenalty) UI.setShame(true);
@@ -355,15 +384,17 @@ function animate() {
                                 updateHUD();
                             });
                         } else if (events.length > 0) {
-                             // Roll again on a hit
+                             // Penalty Hit = Extra Turn
                              safeSetTimeout(() => { gameState = 'READY'; UI.setStatus("ROLL AGAIN"); }, 3000);
                         } else {
+                            // Dead Roll = Turn Over
                             safeSetTimeout(nextTurn, 5000);
                         }
                     }
                 }
             } else { settleCounter = 0; }
             
+            // Sloppy Check: If dice exceed table radius
             if (dice.some(d => Math.sqrt(d.body.position.x**2 + d.body.position.z**2) > 6.5 || d.body.position.y < -5)) triggerSloppy();
         } else {
             camTarget.set(midX, 4, midZ + 2);
@@ -377,14 +408,14 @@ function animate() {
 function triggerSloppy() {
     if (gameState === 'SLOPPY') return;
     gameState = 'SLOPPY';
+    log("[SYSTEM] SLOPPY TRIGGERED");
     UI.setStatus("SLOPPY! DRINK 2 & REROLL");
-    
-    // Task 2.1: Womp Womp pattern
     vibrate([400, 200, 400, 200, 400]);
 
     safeSetTimeout(() => { 
         if (gameState === 'SLOPPY') { 
             gameState = 'READY'; 
+            // Return turn to roller (hack to cancel nextTurn increment)
             nextTurn(); turnIdx = (turnIdx - 1 + players.length) % players.length;
         } 
     }, 3000);

@@ -1,22 +1,41 @@
+/**
+ * @file audio.js
+ * @description Synthetic Sound Engine for Three Man.
+ * 
+ * WHAT: This module uses the Web Audio API to synthesize SFX in real-time.
+ * WHY: To avoid high-latency asset loading and provide dynamic, pitch-shifted 
+ * feedback based on physics velocities.
+ */
+
 export class DirectorAudio {
     constructor() {
+        // WHAT: Audio Context Initialization.
+        // WHY: Core of the Web Audio API. 
         this.ctx = new (window.AudioContext || window.webkitAudioContext)();
     }
 
+    /**
+     * WHY: Browsers block audio until a user interaction (like clicking "PLAY").
+     */
     async resume() {
         if (this.ctx.state === 'suspended') {
             await this.ctx.resume();
         }
     }
 
+    /**
+     * WHAT: Collision "Clack".
+     * WHY: Audio feedback for dice hitting rails or each other.
+     * HOW: Triangle wave oscillator with a fast frequency and gain ramp.
+     */
     playClack(velocity) {
         if (this.ctx.state === 'suspended') return;
         const t = this.ctx.currentTime;
         const osc = this.ctx.createOscillator();
         const gain = this.ctx.createGain();
         
-        // Task 2.2: Refine pitch/volume curve
         osc.type = 'triangle';
+        // Pitch is determined by velocity magnitude
         const freq = 400 + Math.min(velocity * 100, 2000);
         osc.frequency.setValueAtTime(freq, t);
         osc.frequency.exponentialRampToValueAtTime(100, t + 0.1);
@@ -29,6 +48,10 @@ export class DirectorAudio {
         osc.start(); osc.stop(t + 0.1);
     }
 
+    /**
+     * WHAT: Table "Thud".
+     * WHY: Heavy feedback for when dice settle on the infinite floor plane.
+     */
     playThud() {
         if (this.ctx.state === 'suspended') return;
         const t = this.ctx.currentTime;
@@ -42,7 +65,11 @@ export class DirectorAudio {
         osc.start(); osc.stop(t + 0.2);
     }
 
-    // Task 2.2: Low-pass filtered "sliding" noise
+    /**
+     * WHAT: Sliding Noise.
+     * WHY: Ambient noise that scales with dice velocity to sell the 'sliding' feeling.
+     * HOW: White noise buffer passed through a low-pass filter.
+     */
     startSliding() {
         if (this.slidingSource) {
             try { this.slidingSource.stop(); } catch(e) {}
@@ -76,20 +103,17 @@ export class DirectorAudio {
         this.slidingGain.gain.setTargetAtTime(vol, this.ctx.currentTime, 0.05);
     }
 
-    stopSliding() {
-        if (this.slidingGain) {
-            this.slidingGain.gain.setTargetAtTime(0, this.ctx.currentTime, 0.1);
-        }
-    }
-
-    // Task 2.2: Social Callout
+    /**
+     * WHAT: SOCIAL! Callout.
+     * WHY: Unique synthesized tone for the 'Social' rule (Sum of 4 or Face of 4).
+     * HOW: Sawtooth wave with a downward 'womp' ramp.
+     */
     playSocial() {
         if (this.ctx.state === 'suspended') return;
         const t = this.ctx.currentTime;
         const osc = this.ctx.createOscillator();
         const gain = this.ctx.createGain();
         
-        // Simple "Womp Womp" style synthesized voice-ish tone
         osc.type = 'sawtooth';
         osc.frequency.setValueAtTime(200, t);
         osc.frequency.exponentialRampToValueAtTime(150, t + 0.5);
