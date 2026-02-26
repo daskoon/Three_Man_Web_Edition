@@ -6,6 +6,14 @@ import { setupPhysics, createDieBody } from './physics.js';
 import { evaluateRules } from './rules.js';
 import { UI } from './ui.js';
 
+// --- LOGGING ---
+const gameLogs = [];
+const log = (msg) => {
+    const t = new Date().toLocaleTimeString();
+    gameLogs.push(`[${t}] ${msg}`);
+    console.log(msg);
+};
+
 // --- STATE ---
 let players = [];
 let turnIdx = 0;
@@ -19,6 +27,14 @@ let accelMag = 0;
 let gameTimer = null;
 const clock = new THREE.Clock();
 const fixedTimeStep = 1 / 120;
+
+UI.initLogButton(() => {
+    const blob = new Blob([gameLogs.join('\n')], { type: 'text/plain' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = `3man-logs-${Date.now()}.txt`;
+    a.click();
+});
 
 // Task 2.3: Weighty feel constants
 const SHAKE_THRESHOLD = 22;
@@ -172,24 +188,29 @@ document.getElementById('quick-play-btn').onclick = () => {
 // --- CORE LOGIC ---
 function throwDice() {
     if (gameState !== 'SHAKING') return;
+    
+    // Truncate logs for new throw
+    gameLogs.length = 0;
+    log(`New Throw by ${players[turnIdx]}`);
+
     gameState = 'ROLLING';
     settleCounter = 0;
     UI.setStatus("THROW!");
     UI.setShame(false);
     
     dice.forEach((d, i) => {
-        // Start throw from a more controlled height
-        d.body.position.set(i === 0 ? -1 : 1, 4, 5); 
+        // Start throw from a stable position
+        d.body.position.set(i === 0 ? -1 : 1, 4, 0); 
         d.body.type = CANNON.Body.DYNAMIC;
-        d.body.mass = 1.0; // Human-scale mass
+        d.body.mass = 1.0; 
         d.body.updateMassProperties();
         d.body.wakeUp();
 
         // Control throw force: Forward drive toward center
         const force = new CANNON.Vec3(
             (Math.random() - 0.5) * 2, 
-            -2, // Downward slam for impact
-            -5  // Forward roll
+            -5, // Downward slam for impact
+            -8  // Forward roll
         );
         d.body.applyImpulse(force, new CANNON.Vec3(0, 0, 0));
 
@@ -251,10 +272,11 @@ function animate() {
             dice.forEach((d, i) => {
                 const vel = d.body.velocity.length();
                 const pos = d.body.position;
-                if (vel > 20) console.warn(`[Physics] High Velocity Die ${i}: ${vel.toFixed(2)}`, pos);
-                if (Math.sqrt(pos.x**2 + pos.z**2) > 6.4) {
-                    console.warn(`[Physics] Die ${i} breached boundary! Pos: (${pos.x.toFixed(2)}, ${pos.y.toFixed(2)}, ${pos.z.toFixed(2)}) Vel: ${vel.toFixed(2)}`);
+                if (vel > 40) log(`[WARN] Extreme Velocity Die ${i}: ${vel.toFixed(2)}`);
+                if (Math.sqrt(pos.x**2 + pos.z**2) > 6.5) {
+                    log(`[ALERT] Die ${i} Breach! Pos: (${pos.x.toFixed(2)}, ${pos.y.toFixed(2)}, ${pos.z.toFixed(2)}) Vel: ${vel.toFixed(2)}`);
                 }
+                if (pos.y < -1) log(`[CRITICAL] Die ${i} fell through floor! y: ${pos.y.toFixed(2)}`);
             });
 
         dice.forEach((d, i) => {

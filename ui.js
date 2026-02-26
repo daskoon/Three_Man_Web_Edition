@@ -10,6 +10,7 @@ export const UI = {
     btns: document.getElementById('recipient-buttons'),
     playerList: document.getElementById('player-list'),
     playerInput: document.getElementById('player-input'),
+    logBtn: document.getElementById('download-logs-btn'),
 
     renderPlayers(players, removeCallback) {
         this.playerList.innerHTML = players.map((p, k) => `
@@ -26,7 +27,11 @@ export const UI = {
 
     updateHUD(player, threeMan) {
         this.threeMan.innerText = `3MAN: ${threeMan ? threeMan.toUpperCase() : 'NONE'}`;
-        this.turn.innerText = `TURN: ${player.toUpperCase()}`;
+        this.turn.innerText = `TURN: ${player ? player.toUpperCase() : '...'}`;
+    },
+
+    initLogButton(callback) {
+        if (this.logBtn) this.logBtn.onclick = callback;
     },
 
     setStatus(text) {

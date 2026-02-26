@@ -2,22 +2,21 @@ import * as CANNON from 'cannon-es';
 
 export function setupPhysics() {
     const world = new CANNON.World();
-    // Heavy Gravity for Weighty Feel
-    world.gravity.set(0, -50, 0); 
+    // Weighted Gravity (Stable)
+    world.gravity.set(0, -25, 0); 
     world.allowSleep = true;
     world.defaultContactMaterial.friction = 0.5;
-    world.defaultContactMaterial.restitution = 0.1; // Low bounciness
+    world.defaultContactMaterial.restitution = 0.1;
 
-    // Felt Table Surface (Properly oriented Y-up)
-    const tableBody = new CANNON.Body({ mass: 0 });
-    const tableShape = new CANNON.Cylinder(6.5, 6.5, 0.5, 32);
-    // Cylinder is Z-aligned by default in Cannon-es, rotate to Y-aligned
+    // Infinite Floor Plane (Impossible to tunnel through)
+    const groundBody = new CANNON.Body({ mass: 0 });
+    const groundShape = new CANNON.Plane();
     const quat = new CANNON.Quaternion();
     quat.setFromAxisAngle(new CANNON.Vec3(1, 0, 0), -Math.PI / 2);
-    tableBody.addShape(tableShape, new CANNON.Vec3(0, 0, 0), quat);
-    tableBody.position.set(0, -0.25, 0); // Top surface at y=0
-    world.addBody(tableBody);
+    groundBody.addShape(groundShape, new CANNON.Vec3(0, 0, 0), quat);
+    world.addBody(groundBody);
 
+    // Table Rim (Visual boundary check still uses 6.5)
     const numRails = 32;
     const railRadius = 6.3;
     const RAIL_HEIGHT = 4.0;
