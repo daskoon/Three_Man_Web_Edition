@@ -63,6 +63,26 @@ const rim = new THREE.Mesh(
 rim.rotation.x = Math.PI / 2;
 scene.add(rim);
 
+// Debug: Visualize Collision Rails
+const debugRailMat = new THREE.MeshBasicMaterial({ color: 0xff0000, transparent: true, opacity: 0.3, wireframe: true });
+const numRails = 32;
+const railRadius = 6.3;
+const RAIL_HEIGHT = 4.0;
+for (let i = 0; i < numRails; i++) {
+    const angle = (i / numRails) * Math.PI * 2;
+    const mesh = new THREE.Mesh(
+        new THREE.BoxGeometry(2.0, RAIL_HEIGHT, 1.0), // Full extent (2x half-extent)
+        debugRailMat
+    );
+    mesh.position.set(
+        Math.cos(angle) * railRadius,
+        RAIL_HEIGHT / 2,
+        Math.sin(angle) * railRadius
+    );
+    mesh.quaternion.setFromAxisAngle(new THREE.Vector3(0, 1, 0), -angle + Math.PI / 2);
+    scene.add(mesh);
+}
+
 scene.add(new THREE.AmbientLight(0xffffff, 0.6));
 const spot = new THREE.SpotLight(0xffd700, 2.5);
 spot.position.set(0, 15, 5);
@@ -226,6 +246,16 @@ function animate() {
         
         const totalVel = dice[0].body.velocity.length() + dice[1].body.velocity.length();
         if (audio) audio.updateSliding(totalVel);
+
+            // Debug: Log excessive velocities or escapes
+            dice.forEach((d, i) => {
+                const vel = d.body.velocity.length();
+                const pos = d.body.position;
+                if (vel > 20) console.warn(`[Physics] High Velocity Die ${i}: ${vel.toFixed(2)}`, pos);
+                if (Math.sqrt(pos.x**2 + pos.z**2) > 6.4) {
+                    console.warn(`[Physics] Die ${i} breached boundary! Pos: (${pos.x.toFixed(2)}, ${pos.y.toFixed(2)}, ${pos.z.toFixed(2)}) Vel: ${vel.toFixed(2)}`);
+                }
+            });
 
         dice.forEach((d, i) => {
             if (gameState === 'READY') {
