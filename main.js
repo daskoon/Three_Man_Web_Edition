@@ -18,7 +18,7 @@ let settleCounter = 0;
 let accelMag = 0;
 let gameTimer = null;
 const clock = new THREE.Clock();
-const fixedTimeStep = 1 / 60;
+const fixedTimeStep = 1 / 120;
 
 // Task 2.3: Weighty feel constants
 const SHAKE_THRESHOLD = 22;
@@ -109,16 +109,17 @@ document.getElementById('init-btn').onclick = async () => {
     gameState = 'SETUP';
 };
     
-    document.getElementById('add-player-btn').onclick = () => {
-        // Task 3.3: Player Cap Enforcement
-        if (players.length >= 8) return alert("Max 8 players!");
-        const val = UI.playerInput.value.trim();
-        if (val) {
-            players.push(val);
-            UI.renderPlayers(players, window.removePlayer);
-            UI.playerInput.value = '';
-        }
-    };
+document.getElementById('add-player-btn').onclick = () => {
+    // Task 3.3: Player Cap Enforcement
+    if (players.length >= 8) return alert("Max 8 players!");
+    const val = UI.playerInput.value.trim();
+    if (val) {
+        players.push(val);
+        UI.renderPlayers(players, window.removePlayer);
+        UI.playerInput.value = '';
+    }
+};
+
 window.removePlayer = (idx) => {
     players.splice(idx, 1);
     UI.renderPlayers(players, window.removePlayer);
@@ -312,8 +313,7 @@ function animate() {
                 }
             } else { settleCounter = 0; }
             
-            const dist = Math.sqrt(midX**2 + midZ**2);
-            if (dist > 6.5 || dice.some(d => d.body.position.y < -5)) triggerSloppy();
+            if (dice.some(d => Math.sqrt(d.body.position.x**2 + d.body.position.z**2) > 6.5 || d.body.position.y < -5)) triggerSloppy();
         } else {
             camTarget.set(midX, 4, midZ + 2);
             camera.position.lerp(camTarget, lerpFactor);

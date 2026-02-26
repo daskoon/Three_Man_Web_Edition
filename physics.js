@@ -12,7 +12,7 @@ export function setupPhysics() {
     const tableBody = new CANNON.Body({ mass: 0 });
     const tableShape = new CANNON.Cylinder(6.5, 6.5, 0.5, 32);
     tableBody.addShape(tableShape);
-    tableBody.position.set(0, -0.25, 0);
+    tableBody.position.set(0, 0, 0);
     world.addBody(tableBody);
 
     const numRails = 32;
@@ -22,14 +22,15 @@ export function setupPhysics() {
         const angle = (i / numRails) * Math.PI * 2;
         const rail = new CANNON.Body({ mass: 0 });
         // Standard Rim: Tall enough to catch rolls, low enough for 'Sloppy' mistakes
-        const railShape = new CANNON.Box(new CANNON.Vec3(1.0, RAIL_HEIGHT / 2, 0.2));
+        // Jules stability fix: Boxes are 0.5m thick and rotated to form a continuous circle
+        const railShape = new CANNON.Box(new CANNON.Vec3(1.0, RAIL_HEIGHT / 2, 0.5));
         rail.addShape(railShape);
         rail.position.set(
             Math.cos(angle) * railRadius, 
             RAIL_HEIGHT / 2, 
             Math.sin(angle) * railRadius
         );
-        rail.quaternion.setFromAxisAngle(new CANNON.Vec3(0, 1, 0), -angle);
+        rail.quaternion.setFromAxisAngle(new CANNON.Vec3(0, 1, 0), -angle + Math.PI / 2);
         world.addBody(rail);
     }
 
