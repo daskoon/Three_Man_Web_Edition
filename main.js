@@ -5,13 +5,12 @@
  * WHAT: This is the entry point of the application. It synchronizes the Three.js renderer, 
  * the Cannon-es physics world, the synthetic audio engine, and the rule evaluator.
  * 
- * WHY: To create a "VIP Lounge" drinking experience with "Hand of God" physics interaction.
- * 
  * UPDATED: 
- * 1. Implemented verbose session logging (Player name, Physics data, Results, Outcomes).
- * 2. Visualized floor plane in Red wireframe.
- * 3. Fixed dice "sinking" bug by raising floor plane to y=0.3.
- * 4. Cleaned up log button workflow.
+ * 1. Implemented Virtual Round Table (3D Player Heads).
+ * 2. Orbiting POV Camera (Changes perspective based on current roller).
+ * 3. Dynamic "LEFT/RIGHT" role indicators.
+ * 4. Solid Bright Red Floor Plane (Debug).
+ * 5. Persistent Verbose Session Logging.
  */
 
 import * as THREE from 'three';
@@ -34,19 +33,18 @@ UI.initLogButton(() => {
     const now = new Date();
     const timeStr = now.toTimeString().split(' ')[0].replace(/:/g, '-');
     const filename = `3man-session-log-${timeStr}.txt`;
-    
     const blob = new Blob([gameLogs.join('\n')], { type: 'text/plain' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url; a.download = filename;
     a.click();
-    
     gameLogs.length = 0;
     log("LOGS DOWNLOADED - BUFFER TRUNCATED");
 });
 
 // --- GAME STATE ---
 let players = [];
+let playerMeshes = []; // Array of { mesh, label, roleLabel }
 let turnIdx = 0;
 let threeManIdx = -1;
 let isVirgin = true;
@@ -77,71 +75,37 @@ const safeSetTimeout = (fn, delay) => {
 
 // --- 3D ENGINE INITIALIZATION ---
 const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x050505);
 scene.fog = new THREE.FogExp2(0x050505, 0.02);
-const camera = new THREE.PerspectiveCamera(40, window.innerWidth / window.innerHeight, 0.1, 100);
-const renderer = new THREE.WebGLRenderer({ 
-    canvas: document.getElementById('game-canvas'), 
-    antialias: true, 
-    alpha: true 
-});
+const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 100);
+const renderer = new THREE.WebGLRenderer({ canvas: document.getElementById('game-canvas'), antialias: true });
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 renderer.shadowMap.enabled = true;
-renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 
 const world = setupPhysics();
 const loader = new THREE.TextureLoader();
 const feltTex = loader.load('felt_albedo.png');
 const woodTex = loader.load('wood_albedo.png');
 
-// Visual Table Setup
-scene.add(new THREE.Mesh(
-    new THREE.CylinderGeometry(6, 6, 0.5, 64),
-    new THREE.MeshStandardMaterial({ map: feltTex, roughness: 0.8 })
-));
+// Visual Table
+scene.add(new THREE.Mesh(new THREE.CylinderGeometry(6, 6, 0.5, 64), new THREE.MeshStandardMaterial({ map: feltTex, roughness: 0.8 })));
+const rim = new THREE.Mesh(new THREE.CylinderGeometry(6.5, 6.5, 4.0, 64, 1, true), new THREE.MeshStandardMaterial({ map: woodTex, roughness: 0.4, metalness: 0.3, side: THREE.DoubleSide, transparent: true, opacity: 0.1 }));
+rim.position.y = 2.0; scene.add(rim);
 
-// Visual Rim (Synchronized with Jules' 4.0m physical walls)
-const rim = new THREE.Mesh(
-    new THREE.CylinderGeometry(6.5, 6.5, 4.0, 64, 1, true),
-    new THREE.MeshStandardMaterial({ 
-        map: woodTex, 
-        roughness: 0.4, 
-        metalness: 0.3, 
-        side: THREE.DoubleSide, 
-        transparent: true, 
-        opacity: 0.2 
-    })
+// WHAT: Solid Red Debug Floor.
+// WHY: As requested, to brighten and solidify the collision foundation.
+const debugFloor = new THREE.Mesh(
+    new THREE.PlaneGeometry(13, 13), 
+    new THREE.MeshBasicMaterial({ color: 0xff3333, transparent: true, opacity: 0.4, side: THREE.DoubleSide })
 );
-rim.position.y = 2.0;
-scene.add(rim);
-
-// WHAT: Visual Floor Plane (Debug).
-// WHY: As requested by the Boss to see the "Infinite Floor" barrier.
-// HOW: Red wireframe plane matching the physical groundBody at y=0.3.
-const debugFloorMat = new THREE.MeshBasicMaterial({ color: 0xff0000, transparent: true, opacity: 0.3, wireframe: true });
-const debugFloor = new THREE.Mesh(new THREE.PlaneGeometry(20, 20), debugFloorMat);
 debugFloor.rotation.x = -Math.PI / 2;
-debugFloor.position.y = 0.3;
+debugFloor.position.y = 0.31; // Slightly above physics plane to ensure visibility
 scene.add(debugFloor);
 
-// Debug: Collision Cage Visualization (Gold Wireframe)
-const debugRailMat = new THREE.MeshBasicMaterial({ color: 0xffd700, transparent: true, opacity: 0.5, wireframe: true });
-const numRails = 32;
-const railRadius = 6.3;
-const RAIL_HEIGHT = 4.0;
-for (let i = 0; i < numRails; i++) {
-    const angle = (i / numRails) * Math.PI * 2;
-    const mesh = new THREE.Mesh(new THREE.BoxGeometry(2.0, RAIL_HEIGHT, 1.0), debugRailMat);
-    mesh.position.set(Math.cos(angle) * railRadius, RAIL_HEIGHT / 2, Math.sin(angle) * railRadius);
-    mesh.quaternion.setFromAxisAngle(new THREE.Vector3(0, 1, 0), -angle + Math.PI / 2);
-    scene.add(mesh);
-}
-
-scene.add(new THREE.AmbientLight(0xffffff, 0.6));
-const spot = new THREE.SpotLight(0xffd700, 2.5);
-spot.position.set(0, 15, 5);
-spot.castShadow = true;
-scene.add(spot);
+scene.add(new THREE.AmbientLight(0xffffff, 0.4));
+const spot = new THREE.SpotLight(0xffd700, 3.0);
+spot.position.set(0, 15, 0); spot.castShadow = true; scene.add(spot);
 
 const dieMaterials = [
     new THREE.MeshStandardMaterial({ map: createDieTexture(2, renderer) }),
@@ -158,126 +122,129 @@ const dice = [
 ];
 dice.forEach(d => { d.mesh.castShadow = true; scene.add(d.mesh); });
 
-// --- FLOW ---
+// --- VIRTUAL ROUND TABLE LOGIC ---
+/**
+ * WHAT: Player Presence Generator.
+ * WHY: Creates the spheres and labels around the table for spatial turns.
+ */
+function setupPlayerPresences() {
+    // Clear old meshes
+    playerMeshes.forEach(p => { scene.remove(p.mesh); });
+    playerMeshes = [];
+
+    const radius = 9.0;
+    players.forEach((name, i) => {
+        // Player Angle (Clockwise order for +1 increment)
+        const angle = (i / players.length) * Math.PI * 2;
+        
+        // Head Sphere
+        const head = new THREE.Mesh(
+            new THREE.SphereGeometry(0.5, 32, 32),
+            new THREE.MeshStandardMaterial({ color: 0x444444, metalness: 0.5, roughness: 0.2 })
+        );
+        head.position.set(Math.sin(angle) * radius, 1.5, Math.cos(angle) * radius);
+        scene.add(head);
+
+        // Simple placeholder for text labels (we'll update names in UI too)
+        playerMeshes.push({ mesh: head, angle: angle, name: name });
+    });
+}
+
 const updateHUD = () => {
     UI.updateHUD(players[turnIdx], threeManIdx === -1 ? null : players[threeManIdx]);
+    
+    // Highlight the current player sphere
+    playerMeshes.forEach((p, i) => {
+        const isCurrent = (i === turnIdx);
+        const isLeft = (i === (turnIdx - 1 + players.length) % players.length);
+        const isRight = (i === (turnIdx + 1) % players.length);
+        
+        p.mesh.material.emissive.setHex(isCurrent ? 0xffd700 : (isLeft || isRight ? 0x333333 : 0x000000));
+        p.mesh.material.emissiveIntensity = isCurrent ? 1.0 : 0.5;
+    });
 };
 
 const nextTurn = () => {
     turnIdx = (turnIdx + 1) % players.length;
-    isVirgin = true;
-    originalRollerIdx = -1;
-    challengers = [];
-    diceRolledCount = 0;
+    isVirgin = true; originalRollerIdx = -1; challengers = []; diceRolledCount = 0;
     gameState = 'READY';
     updateHUD();
     UI.setStatus(`${players[turnIdx].toUpperCase()}\nSHAKE TO ROLL`);
     UI.setShame(false);
 };
 
-// --- EVENT HANDLERS ---
+// --- HANDLERS ---
 document.getElementById('init-btn').onclick = async () => {
     if (typeof DeviceMotionEvent !== 'undefined' && typeof DeviceMotionEvent.requestPermission === 'function') await DeviceMotionEvent.requestPermission();
-    audio = new DirectorAudio();
-    await audio.resume();
-    UI.splash.classList.add('hidden');
-    UI.setup.classList.remove('hidden');
+    audio = new DirectorAudio(); await audio.resume();
+    UI.splash.classList.add('hidden'); UI.setup.classList.remove('hidden');
     gameState = 'SETUP';
 };
-    
+
 document.getElementById('add-player-btn').onclick = () => {
     if (players.length >= 8) return alert("Max 8 players!");
     const val = UI.playerInput.value.trim();
-    if (val) {
-        players.push(val);
-        UI.renderPlayers(players, window.removePlayer);
-        UI.playerInput.value = '';
-    }
+    if (val) { players.push(val); UI.renderPlayers(players, window.removePlayer); UI.playerInput.value = ''; }
 };
 
-window.removePlayer = (idx) => {
-    players.splice(idx, 1);
-    UI.renderPlayers(players, window.removePlayer);
-};
+window.removePlayer = (idx) => { players.splice(idx, 1); UI.renderPlayers(players, window.removePlayer); };
 
 const startGame = () => {
     UI.setup.classList.add('hidden');
+    setupPlayerPresences();
     turnIdx = players.length - 1; 
     nextTurn();
 };
 
-document.getElementById('start-game-btn').onclick = () => {
-    if (players.length < 2) return alert("Need 2+ players");
-    startGame();
-};
+document.getElementById('start-game-btn').onclick = () => { if (players.length < 2) return alert("Need 2+ players"); startGame(); };
 
 document.getElementById('quick-play-btn').onclick = () => {
-    const legends = ["SKOON", "FACE", "RICH", "BLAZE", "ROB", "CRUSTY", "BM", "SHADOW"];
-    const shuffled = [...legends].sort(() => Math.random() - 0.5);
-    players = shuffled.slice(0, 5);
+    players = ["SKOON", "FACE", "RICH", "BLAZE", "ROB"].sort(() => Math.random() - 0.5);
     startGame();
 };
 
 function throwDice() {
     if (gameState !== 'SHAKING') return;
-    
-    // WHAT: Verbose Event Logging.
-    log(`>>> ${players[turnIdx].toUpperCase()} ROLLS >>>`);
-
-    gameState = 'ROLLING';
-    settleCounter = 0;
-    UI.setStatus("THROW!");
+    log(`>>> ${players[turnIdx].toUpperCase()} ROLLS FROM POV >>>`);
+    gameState = 'ROLLING'; settleCounter = 0; UI.setStatus("THROW!");
     
     dice.forEach((d, i) => {
-        const isSplit = challengeType === 'SPLIT';
-        if (isSplit && i !== diceRolledCount) {
-            d.body.type = CANNON.Body.STATIC;
-            return;
-        }
-
-        // Randomize initial physics state
-        d.body.position.set((i === 0 ? -2 : 2) + (Math.random() - 0.5) * 2, 4 + Math.random() * 2, (Math.random() - 0.5) * 2); 
+        if (challengeType === 'SPLIT' && i !== diceRolledCount) { d.body.type = CANNON.Body.STATIC; return; }
+        
+        // Randomize from current player's POV position
+        const pMesh = playerMeshes[turnIdx].mesh;
+        d.body.position.set(pMesh.position.x * 0.5, 4, pMesh.position.z * 0.5);
         d.body.quaternion.set(Math.random(), Math.random(), Math.random(), Math.random()).normalize();
+        d.body.type = CANNON.Body.DYNAMIC; d.body.mass = 1.0; d.body.updateMassProperties(); d.body.wakeUp();
 
-        d.body.type = CANNON.Body.DYNAMIC;
-        d.body.mass = 1.0; 
-        d.body.updateMassProperties();
-        d.body.wakeUp();
-
-        const force = new CANNON.Vec3((Math.random() - 0.5) * 10, -5 - Math.random() * 10, -10 - Math.random() * 10);
+        // Vector toward center from player seat
+        const force = new CANNON.Vec3(-pMesh.position.x * 0.8, -8, -pMesh.position.z * 0.8);
         d.body.applyImpulse(force, new CANNON.Vec3(0, 0, 0));
-        d.body.angularVelocity.set(Math.random() * 60 - 30, Math.random() * 60 - 30, Math.random() * 60 - 30);
+        d.body.angularVelocity.set(Math.random()*60-30, Math.random()*60-30, Math.random()*60-30);
     });
     vibrate(150);
 }
 
-// Interaction Listeners
+// Listeners
 window.addEventListener('devicemotion', (e) => {
     if (gameState !== 'READY' && gameState !== 'SHAKING' && gameState !== 'CHALLENGE_READY') return;
-    const a = e.accelerationIncludingGravity;
-    if (!a) return;
+    const a = e.accelerationIncludingGravity; if (!a) return;
     const currentMag = Math.sqrt(a.x**2 + a.y**2 + a.z**2);
     accelMag = accelMag * 0.7 + currentMag * 0.3;
-
     if (accelMag > 22) {
-        if (gameState === 'READY' || gameState === 'CHALLENGE_READY') {
-            gameState = 'SHAKING';
-            vibrate([20, 20, 20, 20, 20]);
-        }
-    } else if (gameState === 'SHAKING' && accelMag < 15) {
-        throwDice();
-    }
+        if (gameState === 'READY' || gameState === 'CHALLENGE_READY') { gameState = 'SHAKING'; vibrate([20, 20, 20, 20, 20]); }
+    } else if (gameState === 'SHAKING' && accelMag < 15) { throwDice(); }
 });
 
 window.onmousedown = (e) => { 
     if ((gameState === 'READY' || gameState === 'CHALLENGE_READY') && e.target.tagName !== 'BUTTON') {
-        gameState = 'SHAKING';
-        setTimeout(throwDice, 800);
+        gameState = 'SHAKING'; setTimeout(throwDice, 800);
     }
 };
 
 /**
- * WHAT: Master Animation Loop.
+ * WHAT: Master Animation Loop with POV Camera.
+ * WHY: Orbit the camera to the current player's seat.
  */
 let frameCount = 0;
 function animate() {
@@ -287,50 +254,48 @@ function animate() {
     
     if (gameState !== 'SPLASH' && gameState !== 'SETUP') {
         world.step(fixedTimeStep, dt, 20);
-        if (!dice[0] || !dice[1]) return;
+        if (!dice[0] || !dice[1] || !playerMeshes[turnIdx]) return;
         
         const midX = (dice[0].mesh.position.x + dice[1].mesh.position.x) / 2;
         const midZ = (dice[0].mesh.position.z + dice[1].mesh.position.z) / 2;
 
-        // --- TRACKING & PHYSICS LOGS (Jules' Metrics Restored) ---
+        // Physics Logs (Restored)
         if (gameState === 'ROLLING') {
             dice.forEach((d, i) => {
                 const vel = d.body.velocity.length();
                 const pos = d.body.position;
-                if (frameCount % 2 === 0) {
-                    log(` [Physics] Die ${i}: ${vel.toFixed(2)} Vec3 {x: ${pos.x.toFixed(2)}, y: ${pos.y.toFixed(2)}, z: ${pos.z.toFixed(2)}}`);
-                }
+                if (frameCount % 4 === 0) log(` [Physics] Die ${i}: ${vel.toFixed(2)} Vec3 {x: ${pos.x.toFixed(2)}, y: ${pos.y.toFixed(2)}, z: ${pos.z.toFixed(2)}}`);
             });
             frameCount++;
         }
 
         dice.forEach((d, i) => {
             if (gameState === 'READY' || (gameState === 'CHALLENGE_READY' && challengeType === 'SPLIT' && i > diceRolledCount)) {
-                const targetPos = new THREE.Vector3(i === 0 ? -0.8 : 0.8, 6, 6);
-                d.mesh.position.lerp(targetPos, lerpFactor);
+                // Hovering dice relative to current POV
+                const pMesh = playerMeshes[turnIdx].mesh;
+                const hoverPos = new THREE.Vector3(pMesh.position.x * 0.6, 4, pMesh.position.z * 0.6);
+                d.mesh.position.lerp(hoverPos, lerpFactor);
                 d.mesh.rotation.y += 0.01;
                 d.body.position.set(d.mesh.position.x, d.mesh.position.y, d.mesh.position.z);
             } else {
-                d.mesh.position.copy(d.body.position);
-                d.mesh.quaternion.copy(d.body.quaternion);
+                d.mesh.position.copy(d.body.position); d.mesh.quaternion.copy(d.body.quaternion);
             }
         });
 
-        // Camera Management
+        // --- POV CAMERA ORBIT ---
+        const pMesh = playerMeshes[turnIdx].mesh;
+        const camPos = new THREE.Vector3(pMesh.position.x * 1.5, 6, pMesh.position.z * 1.5);
+        
         if (gameState === 'READY' || gameState === 'SHAKING' || gameState === 'CHALLENGE_READY') {
-            camera.position.lerp(new THREE.Vector3(0, 12, 15), lerpFactor);
-            camera.lookAt(0, 4, 0);
+            camera.position.lerp(camPos, lerpFactor * 0.5);
+            camera.lookAt(0, 0, 0);
         } else if (gameState === 'ROLLING') {
-            camera.position.lerp(new THREE.Vector3(midX * 0.3, 10, 10 + midZ * 0.3), lerpFactor);
-            camera.lookAt(midX * 0.1, 0, 0);
+            camera.position.lerp(new THREE.Vector3(midX * 0.5, 12, 12 + midZ * 0.5), lerpFactor);
+            camera.lookAt(midX, 0, midZ);
             
             if (dice.every(d => d.body.velocity.length() < 0.05)) {
-                settleCounter++;
-                if (settleCounter > 40) {
-                    resolveRoll();
-                }
+                settleCounter++; if (settleCounter > 40) { resolveRoll(); }
             } else { settleCounter = 0; }
-            
             if (dice.some(d => Math.sqrt(d.body.position.x**2 + d.body.position.z**2) > 6.5)) triggerSloppy();
         } else {
             camera.position.lerp(new THREE.Vector3(midX, 4, midZ + 2), lerpFactor);
@@ -340,102 +305,69 @@ function animate() {
     renderer.render(scene, camera);
 }
 
-/**
- * WHAT: Roll Resolver.
- * WHY: Processes outcome and logs the final result.
- */
 function resolveRoll() {
-    gameState = 'RESULTS';
-    audio.playThud();
-    const v1 = getFace(dice[0].mesh);
-    const v2 = getFace(dice[1].mesh);
+    gameState = 'RESULTS'; audio.playThud();
+    const v1 = getFace(dice[0].mesh); const v2 = getFace(dice[1].mesh);
 
     if (originalRollerIdx !== -1) {
-        // --- CHALLENGE LOGIC ---
         if (challengeType === 'SINGLE') {
             const won = (v1 === v2);
-            const resultText = won ? `${players[turnIdx]} WON! ${players[originalRollerIdx]} DRINKS` : `${players[turnIdx]} FAILED! ${players[turnIdx]} DRINKS`;
-            UI.setStatus(resultText.replace('!', '!\n'));
-            log(`!!! CHALLENGE RESULT: ROLLED ${v1}&${v2} -> ${resultText}`);
-            
-            turnIdx = originalRollerIdx;
-            originalRollerIdx = -1; challengeType = null; challengers = [];
+            const res = won ? `${players[turnIdx]} WON! ${players[originalRollerIdx]} DRINKS` : `${players[turnIdx]} FAILED! ${players[turnIdx]} DRINKS`;
+            UI.setStatus(res.replace('!', '!\n')); log(`!!! CHALLENGE: ${res}`);
+            turnIdx = originalRollerIdx; originalRollerIdx = -1; challengeType = null;
             safeSetTimeout(() => { gameState = 'READY'; UI.setStatus("ROLL AGAIN"); }, 5000);
         } else {
             if (diceRolledCount === 0) {
-                diceRolledCount = 1;
-                turnIdx = challengers[1];
-                gameState = 'CHALLENGE_READY';
+                diceRolledCount = 1; turnIdx = challengers[1]; gameState = 'CHALLENGE_READY';
                 UI.setStatus(`${players[turnIdx].toUpperCase()}\nROLL DIE 2`);
                 log(`>>> SPLIT CHALLENGE: Die 1 is ${v1}. Waiting for ${players[turnIdx]}...`);
             } else {
                 const won = (v1 === v2);
-                const resultText = won ? `MATCH! ${players[originalRollerIdx]} DRINKS TWICE!` : `NO MATCH! ${players[challengers[0]]} & ${players[challengers[1]]} DRINK`;
-                UI.setStatus(resultText.replace('!', '!\n'));
-                log(`!!! SPLIT CHALLENGE RESULT: Die 1=${v1}, Die 2=${v2} -> ${resultText}`);
-                
-                turnIdx = originalRollerIdx;
-                originalRollerIdx = -1; challengeType = null; diceRolledCount = 0; challengers = [];
+                const res = won ? `MATCH! ${players[originalRollerIdx]} DRINKS TWICE!` : `NO MATCH! ${players[challengers[0]]} & ${players[challengers[1]]} DRINK`;
+                UI.setStatus(res.replace('!', '!\n')); log(`!!! SPLIT CHALLENGE: ${res}`);
+                turnIdx = originalRollerIdx; originalRollerIdx = -1; challengeType = null; diceRolledCount = 0;
                 safeSetTimeout(() => { gameState = 'READY'; UI.setStatus("ROLL AGAIN"); }, 5000);
             }
         }
     } else {
-        // --- STANDARD RULE EVALUATION ---
         const { events, newThreeManIdx, threeManPenalty, isDoubles } = evaluateRules(v1, v2, players, turnIdx, threeManIdx, isVirgin);
-        
         if (threeManPenalty) UI.setShame(true);
         if (events.some(e => e.includes("SOCIAL"))) audio.playSocial();
-
         threeManIdx = newThreeManIdx;
         const statusStr = `ROLLED ${v1} & ${v2}\n${events.join(' | ')}`;
-        UI.setStatus(statusStr);
-        log(`!!! ROLL RESULT: ${statusStr.replace('\n', ' | ')}`);
-        updateHUD();
-        isVirgin = false;
+        UI.setStatus(statusStr); log(`!!! ROLL RESULT: ${statusStr.replace('\n', ' | ')}`);
+        updateHUD(); isVirgin = false;
 
         if (isDoubles) {
             gameState = 'DECIDING';
             UI.showDoublesChoice((type) => {
-                challengeType = type;
-                originalRollerIdx = turnIdx;
+                challengeType = type; originalRollerIdx = turnIdx;
                 if (type === 'SINGLE') {
                     UI.showPicker("PICK ONE CHALLENGER", players, 1, (picked) => {
                         challengers = picked; turnIdx = picked[0];
                         gameState = 'CHALLENGE_READY'; UI.setStatus(`${players[turnIdx].toUpperCase()}\nSHAKE TO CHALLENGE`);
-                        log(`>>> CHALLENGE INITIATED: ${players[originalRollerIdx]} vs ${players[turnIdx]}`);
                     });
                 } else {
                     UI.showPicker("PICK TWO CHALLENGERS", players, 2, (picked) => {
                         challengers = picked; turnIdx = picked[0]; diceRolledCount = 0;
                         gameState = 'CHALLENGE_READY'; UI.setStatus(`${players[turnIdx].toUpperCase()}\nROLL DIE 1`);
-                        log(`>>> SPLIT CHALLENGE INITIATED: ${players[originalRollerIdx]} vs ${players[challengers[0]]} & ${players[challengers[1]]}`);
                     });
                 }
             });
-        } else if (events.length > 0) {
-             safeSetTimeout(() => { gameState = 'READY'; UI.setStatus("ROLL AGAIN"); }, 3000);
-        } else {
-            safeSetTimeout(nextTurn, 5000);
-        }
+        } else if (events.length > 0) { safeSetTimeout(() => { gameState = 'READY'; UI.setStatus("ROLL AGAIN"); }, 3000);
+        } else { safeSetTimeout(nextTurn, 5000); }
     }
 }
 
 function triggerSloppy() {
     if (gameState === 'SLOPPY') return;
-    gameState = 'SLOPPY';
-    const msg = "SLOPPY! DRINK 2 & REROLL";
-    log(` [SYSTEM] ${msg}`);
-    UI.setStatus(msg);
+    gameState = 'SLOPPY'; log(" [SYSTEM] SLOPPY TRIGGERED");
+    UI.setStatus("SLOPPY! DRINK 2 & REROLL");
     vibrate([400, 200, 400, 200, 400]);
     safeSetTimeout(() => { 
-        if (gameState === 'SLOPPY') { 
-            gameState = 'READY'; 
-            nextTurn(); turnIdx = (turnIdx - 1 + players.length) % players.length;
-        } 
+        if (gameState === 'SLOPPY') { gameState = 'READY'; nextTurn(); turnIdx = (turnIdx - 1 + players.length) % players.length; } 
     }, 3000);
 }
 
 animate();
-window.addEventListener('resize', () => { 
-    camera.aspect = window.innerWidth/window.innerHeight; camera.updateProjectionMatrix(); renderer.setSize(window.innerWidth, window.innerHeight); 
-});
+window.addEventListener('resize', () => { camera.aspect = window.innerWidth/window.innerHeight; camera.updateProjectionMatrix(); renderer.setSize(window.innerWidth, window.innerHeight); });
