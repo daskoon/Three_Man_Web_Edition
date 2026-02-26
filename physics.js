@@ -39,13 +39,13 @@ export function setupPhysics() {
     quat.setFromAxisAngle(new CANNON.Vec3(1, 0, 0), -Math.PI / 2);
     groundBody.addShape(groundShape, new CANNON.Vec3(0, 0, 0), quat);
     // Raise position so dice surfaces align with visual floor at y=0
-    groundBody.position.set(0, 0.3, 0);
+    groundBody.position.set(0, 0.31, 0);
     world.addBody(groundBody);
 
     // WHAT: Circular Collision Rails (The "Cage").
-    // WHY: To contain the dice within the visual table area (6.5 radius). 
-    const numRails = 32;
-    const railRadius = 6.3;
+    // WHY: Scaled up to 9.5 radius to give dice more room to travel.
+    const numRails = 48; // Increased segments for larger circumference
+    const railRadius = 9.3;
     const RAIL_HEIGHT = 4.0; 
     for (let i = 0; i < numRails; i++) {
         const angle = (i / numRails) * Math.PI * 2;

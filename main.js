@@ -89,19 +89,32 @@ const feltTex = loader.load('felt_albedo.png');
 const woodTex = loader.load('wood_albedo.png');
 
 // Visual Table
-scene.add(new THREE.Mesh(new THREE.CylinderGeometry(6, 6, 0.5, 64), new THREE.MeshStandardMaterial({ map: feltTex, roughness: 0.8 })));
-const rim = new THREE.Mesh(new THREE.CylinderGeometry(6.5, 6.5, 4.0, 64, 1, true), new THREE.MeshStandardMaterial({ map: woodTex, roughness: 0.4, metalness: 0.3, side: THREE.DoubleSide, transparent: true, opacity: 0.1 }));
+scene.add(new THREE.Mesh(new THREE.CylinderGeometry(9, 9, 0.5, 64), new THREE.MeshStandardMaterial({ map: feltTex, roughness: 0.8 })));
+const rim = new THREE.Mesh(new THREE.CylinderGeometry(9.5, 9.5, 4.0, 64, 1, true), new THREE.MeshStandardMaterial({ map: woodTex, roughness: 0.4, metalness: 0.3, side: THREE.DoubleSide, transparent: true, opacity: 0.2 }));
 rim.position.y = 2.0; scene.add(rim);
 
-// WHAT: Solid Red Debug Floor.
-// WHY: As requested, to brighten and solidify the collision foundation.
+// WHAT: Visual Floor Plane (Debug).
+// WHY: Set to invisible. Mechanics are sound at y=0.31, no need to see it.
 const debugFloor = new THREE.Mesh(
-    new THREE.PlaneGeometry(13, 13), 
-    new THREE.MeshBasicMaterial({ color: 0xff3333, transparent: true, opacity: 0.4, side: THREE.DoubleSide })
+    new THREE.PlaneGeometry(30, 30), 
+    new THREE.MeshBasicMaterial({ color: 0xff3333, transparent: true, opacity: 0.4, side: THREE.DoubleSide, visible: false })
 );
 debugFloor.rotation.x = -Math.PI / 2;
 debugFloor.position.y = 0.31; // Slightly above physics plane to ensure visibility
 scene.add(debugFloor);
+
+// Debug: Collision Cage Visualization (Gold Wireframe)
+const debugRailMat = new THREE.MeshBasicMaterial({ color: 0xffd700, transparent: true, opacity: 0.3, wireframe: true });
+const numRails = 48;
+const railRadius = 9.3;
+const RAIL_HEIGHT = 4.0;
+for (let i = 0; i < numRails; i++) {
+    const angle = (i / numRails) * Math.PI * 2;
+    const mesh = new THREE.Mesh(new THREE.BoxGeometry(2.0, RAIL_HEIGHT, 1.0), debugRailMat);
+    mesh.position.set(Math.cos(angle) * railRadius, RAIL_HEIGHT / 2, Math.sin(angle) * railRadius);
+    mesh.quaternion.setFromAxisAngle(new THREE.Vector3(0, 1, 0), -angle + Math.PI / 2);
+    scene.add(mesh);
+}
 
 scene.add(new THREE.AmbientLight(0xffffff, 0.4));
 const spot = new THREE.SpotLight(0xffd700, 3.0);
@@ -125,42 +138,80 @@ dice.forEach(d => { d.mesh.castShadow = true; scene.add(d.mesh); });
 // --- VIRTUAL ROUND TABLE LOGIC ---
 /**
  * WHAT: Player Presence Generator.
- * WHY: Creates the spheres and labels around the table for spatial turns.
+ * WHY: Creates the spheres and floating HTML labels around the table.
  */
 function setupPlayerPresences() {
-    // Clear old meshes
-    playerMeshes.forEach(p => { scene.remove(p.mesh); });
+    playerMeshes.forEach(p => { 
+        scene.remove(p.mesh); 
+        if(p.labelEl) p.labelEl.remove(); 
+    });
     playerMeshes = [];
 
-    const radius = 9.0;
+    const radius = 12.0; // Pushed back to accommodate larger table
+    const container = document.getElementById('ui-container');
+
     players.forEach((name, i) => {
-        // Player Angle (Clockwise order for +1 increment)
         const angle = (i / players.length) * Math.PI * 2;
         
-        // Head Sphere
         const head = new THREE.Mesh(
-            new THREE.SphereGeometry(0.5, 32, 32),
+            new THREE.SphereGeometry(0.8, 32, 32),
             new THREE.MeshStandardMaterial({ color: 0x444444, metalness: 0.5, roughness: 0.2 })
         );
         head.position.set(Math.sin(angle) * radius, 1.5, Math.cos(angle) * radius);
         scene.add(head);
 
-        // Simple placeholder for text labels (we'll update names in UI too)
-        playerMeshes.push({ mesh: head, angle: angle, name: name });
+        // 2D Floating Label
+        const label = document.createElement('div');
+        label.className = 'floating-label hidden';
+        label.innerHTML = `<strong>${name.toUpperCase()}</strong><br><span class="role-text"></span>`;
+        container.appendChild(label);
+
+        playerMeshes.push({ mesh: head, angle: angle, name: name, labelEl: label });
     });
 }
 
 const updateHUD = () => {
     UI.updateHUD(players[turnIdx], threeManIdx === -1 ? null : players[threeManIdx]);
     
-    // Highlight the current player sphere
     playerMeshes.forEach((p, i) => {
-        const isCurrent = (i === turnIdx);
-        const isLeft = (i === (turnIdx - 1 + players.length) % players.length);
-        const isRight = (i === (turnIdx + 1) % players.length);
+        // Base state
+        let isHighlighted = false;
+        let roleStr = "";
+        let hexColor = 0x222222; // Default Dark Grey
         
-        p.mesh.material.emissive.setHex(isCurrent ? 0xffd700 : (isLeft || isRight ? 0x333333 : 0x000000));
-        p.mesh.material.emissiveIntensity = isCurrent ? 1.0 : 0.5;
+        // Contextual Logic
+        if (gameState === 'CHALLENGE_READY' && challengeType === 'SPLIT') {
+            // Highlight both challengers in Split Mode
+            if (challengers.includes(i)) {
+                isHighlighted = true;
+                hexColor = 0xffd700; // Gold
+                roleStr = "(CHALLENGER)";
+            }
+        } else {
+            // Normal Turn Logic
+            const isCurrent = (i === turnIdx);
+            const isLeft = (i === (turnIdx - 1 + players.length) % players.length);
+            const isRight = (i === (turnIdx + 1) % players.length);
+
+            if (isCurrent) {
+                isHighlighted = true;
+                hexColor = 0xffd700;
+                roleStr = "(YOU)";
+            } else if (isLeft) {
+                roleStr = "LEFT (Drinks on 7)";
+            } else if (isRight) {
+                roleStr = "RIGHT (Drinks on 11)";
+            }
+        }
+        
+        // Apply Material Updates
+        p.mesh.material.emissive.setHex(hexColor);
+        p.mesh.material.emissiveIntensity = isHighlighted ? 0.8 : 0.0;
+        
+        // Update Label Text
+        if (p.labelEl) {
+            p.labelEl.querySelector('.role-text').innerText = roleStr;
+        }
     });
 };
 
@@ -271,9 +322,14 @@ function animate() {
 
         dice.forEach((d, i) => {
             if (gameState === 'READY' || (gameState === 'CHALLENGE_READY' && challengeType === 'SPLIT' && i > diceRolledCount)) {
-                // Hovering dice relative to current POV
+                // Hovering dice relative to current POV (Offset i to prevent Z-fighting)
                 const pMesh = playerMeshes[turnIdx].mesh;
-                const hoverPos = new THREE.Vector3(pMesh.position.x * 0.6, 4, pMesh.position.z * 0.6);
+                const angle = playerMeshes[turnIdx].angle;
+                // Calculate an orthogonal offset so dice sit side-by-side relative to the camera
+                const offsetX = Math.cos(angle + Math.PI/2) * (i === 0 ? -1 : 1);
+                const offsetZ = Math.sin(angle + Math.PI/2) * (i === 0 ? -1 : 1);
+                
+                const hoverPos = new THREE.Vector3(pMesh.position.x * 0.6 + offsetX, 4, pMesh.position.z * 0.6 + offsetZ);
                 d.mesh.position.lerp(hoverPos, lerpFactor);
                 d.mesh.rotation.y += 0.01;
                 d.body.position.set(d.mesh.position.x, d.mesh.position.y, d.mesh.position.z);
@@ -298,7 +354,10 @@ function animate() {
             } else { settleCounter = 0; }
             if (dice.some(d => Math.sqrt(d.body.position.x**2 + d.body.position.z**2) > 6.5)) triggerSloppy();
         } else {
-            camera.position.lerp(new THREE.Vector3(midX, 4, midZ + 2), lerpFactor);
+            // Close-up on Results (Frame both dice)
+            const distBetween = dice[0].mesh.position.distanceTo(dice[1].mesh.position);
+            const camHeight = Math.max(4, distBetween * 0.8); // Pull back if dice are far apart
+            camera.position.lerp(new THREE.Vector3(midX, camHeight, midZ + camHeight * 0.5), lerpFactor);
             camera.lookAt(midX, 0, midZ);
         }
     }
