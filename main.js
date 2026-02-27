@@ -191,17 +191,17 @@ bulb.position.set(0, tableHeight + 10, 0);
 scene.add(bulb);
 
 const dieMaterials = [
-    new THREE.MeshStandardMaterial({ map: createDieTexture(2, renderer) }),
-    new THREE.MeshStandardMaterial({ map: createDieTexture(5, renderer) }),
-    new THREE.MeshStandardMaterial({ map: createDieTexture(1, renderer) }),
-    new THREE.MeshStandardMaterial({ map: createDieTexture(6, renderer) }),
-    new THREE.MeshStandardMaterial({ map: createDieTexture(3, renderer) }),
-    new THREE.MeshStandardMaterial({ map: createDieTexture(4, renderer) })
+    new THREE.MeshStandardMaterial({ map: createDieTexture(2, renderer), transparent: true, opacity: 0.9 }),
+    new THREE.MeshStandardMaterial({ map: createDieTexture(5, renderer), transparent: true, opacity: 0.9 }),
+    new THREE.MeshStandardMaterial({ map: createDieTexture(1, renderer), transparent: true, opacity: 0.9 }),
+    new THREE.MeshStandardMaterial({ map: createDieTexture(6, renderer), transparent: true, opacity: 0.9 }),
+    new THREE.MeshStandardMaterial({ map: createDieTexture(3, renderer), transparent: true, opacity: 0.9 }),
+    new THREE.MeshStandardMaterial({ map: createDieTexture(4, renderer), transparent: true, opacity: 0.9 })
 ];
 
 const dice = [
-    { mesh: new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.6, 0.6), dieMaterials), body: createDieBody(-0.6, world) },
-    { mesh: new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.6, 0.6), dieMaterials), body: createDieBody(0.6, world) }
+    { mesh: new THREE.Mesh(new THREE.BoxGeometry(0.19, 0.19, 0.19), dieMaterials), body: createDieBody(-0.6, world) },
+    { mesh: new THREE.Mesh(new THREE.BoxGeometry(0.19, 0.19, 0.19), dieMaterials), body: createDieBody(0.6, world) }
 ];
 dice.forEach(d => { d.mesh.castShadow = true; scene.add(d.mesh); });
 
@@ -396,17 +396,19 @@ function animate() {
                 // Hovering dice relative to current POV (Offset i to prevent Z-fighting)
                 const pMesh = playerMeshes[turnIdx].mesh;
                 const angle = playerMeshes[turnIdx].angle;
-                // Calculate an orthogonal offset so dice sit side-by-side relative to the camera
-                const offsetX = Math.cos(angle + Math.PI/2) * (i === 0 ? -0.8 : 0.8);
-                const offsetZ = Math.sin(angle + Math.PI/2) * (i === 0 ? -0.8 : 0.8);
                 
-                // Use 0.5x radius (5.0m) to keep dice safely within the 7.0m table
+                // Increase offset for massive 'Boss Mode' dice (4x scale)
+                const offsetX = Math.cos(angle + Math.PI/2) * (i === 0 ? -1.5 : 1.5);
+                const offsetZ = Math.sin(angle + Math.PI/2) * (i === 0 ? -1.5 : 1.5);
+                
                 const hoverPos = new THREE.Vector3(pMesh.position.x * 0.5 + offsetX, tableHeight + 4, pMesh.position.z * 0.5 + offsetZ);
                 d.mesh.position.lerp(hoverPos, lerpFactor);
+                d.mesh.scale.lerp(new THREE.Vector3(4, 4, 4), lerpFactor); // BOSS MODE
                 d.mesh.rotation.y += 0.01;
                 d.body.position.set(d.mesh.position.x, d.mesh.position.y, d.mesh.position.z);
             } else {
                 d.mesh.position.copy(d.body.position); d.mesh.quaternion.copy(d.body.quaternion);
+                d.mesh.scale.lerp(new THREE.Vector3(1, 1, 1), lerpFactor); // REALISTIC SIZE
             }
         });
 

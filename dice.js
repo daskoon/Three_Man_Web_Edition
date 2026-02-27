@@ -22,18 +22,12 @@ export function createDieTexture(number, renderer) {
     canvas.width = 256; canvas.height = 256;
     const ctx = canvas.getContext('2d');
     
-    // Background
-    ctx.fillStyle = '#ffffff';
+    // Background: Translucent Casino Red
+    ctx.fillStyle = 'rgba(220, 20, 60, 0.8)';
     ctx.fillRect(0, 0, 256, 256);
     
-    // Border/Edge
-    ctx.strokeStyle = '#cccccc';
-    ctx.lineWidth = 15;
-    ctx.strokeRect(0, 0, 256, 256);
-    
-    // WHAT: Pip Mapping.
-    // HOW: Coordinates for every die face (1-6).
-    ctx.fillStyle = '#111111';
+    // Pip Filling: Flush White Pips (Equal density paint simulation)
+    ctx.fillStyle = '#ffffff';
     const pips = {
         1: [[128, 128]], 2: [[64, 64], [192, 192]], 3: [[64, 64], [128, 128], [192, 192]],
         4: [[64, 64], [192, 64], [64, 192], [192, 192]], 5: [[64, 64], [192, 64], [128, 128], [64, 192], [192, 192]],
