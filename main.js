@@ -364,6 +364,57 @@ window.onmousedown = (e) => {
     }
 };
 
+// --- FREE CAM CONTROLS ---
+let isFreeCam = false;
+let cameraPitch = -0.3; // Initial tilt
+let cameraYaw = 0;
+const keys = {};
+let isLeftDown = false;
+let isRightDown = false;
+
+document.getElementById('freecam-btn').onclick = (e) => {
+    isFreeCam = !isFreeCam;
+    e.target.innerText = `FREE CAM: ${isFreeCam ? 'ON' : 'OFF'}`;
+    e.target.style.background = isFreeCam ? 'var(--gold)' : 'rgba(0,0,0,0.5)';
+    e.target.style.color = isFreeCam ? 'black' : 'white';
+    if (isFreeCam) {
+        cameraYaw = Math.atan2(camera.position.x, camera.position.z);
+        cameraPitch = -0.5;
+    }
+};
+
+window.addEventListener('keydown', (e) => { keys[e.code] = true; });
+window.addEventListener('keyup', (e) => { keys[e.code] = false; });
+window.addEventListener('mousedown', (e) => {
+    if (e.button === 0) isLeftDown = true;
+    if (e.button === 2) isRightDown = true;
+});
+window.addEventListener('mouseup', (e) => {
+    if (e.button === 0) isLeftDown = false;
+    if (e.button === 2) isRightDown = false;
+});
+window.addEventListener('contextmenu', (e) => { if (isFreeCam) e.preventDefault(); });
+
+window.addEventListener('mousemove', (e) => {
+    if (!isFreeCam) return;
+    const sensitivity = 0.005;
+    if (isLeftDown) {
+        // Tilt (X-axis) and local Pan (simulated with Yaw for now)
+        cameraPitch -= e.movementY * sensitivity;
+        cameraYaw -= e.movementX * sensitivity;
+    } else if (isRightDown) {
+        // Pure Yaw
+        cameraYaw -= e.movementX * sensitivity;
+    }
+    cameraPitch = Math.max(-Math.PI/2, Math.min(Math.PI/2, cameraPitch));
+});
+
+window.addEventListener('wheel', (e) => {
+    if (!isFreeCam) return;
+    const forward = new THREE.Vector3(0, 0, -1).applyQuaternion(camera.quaternion);
+    camera.position.addScaledVector(forward, -e.deltaY * 0.01);
+});
+
 /**
  * WHAT: Master Animation Loop with POV Camera.
  * WHY: Orbit the camera to the current player's seat.
@@ -375,14 +426,30 @@ function animate() {
     const lerpFactor = 1.0 - Math.pow(0.01, dt);
     
     if (gameState !== 'SPLASH' && gameState !== 'SETUP') {
-        world.step(fixedTimeStep, dt, 20);
+        if (!isFreeCam) {
+            world.step(fixedTimeStep, dt, 20);
+        } else {
+            // Free Cam Movement (WASD)
+            const speed = 10 * dt;
+            const forward = new THREE.Vector3(0, 0, -1).applyQuaternion(camera.quaternion);
+            const right = new THREE.Vector3(1, 0, 0).applyQuaternion(camera.quaternion);
+            if (keys['KeyW']) camera.position.addScaledVector(forward, speed);
+            if (keys['KeyS']) camera.position.addScaledVector(forward, -speed);
+            if (keys['KeyA']) camera.position.addScaledVector(right, -speed);
+            if (keys['KeyD']) camera.position.addScaledVector(right, speed);
+            if (keys['Space']) camera.position.y += speed;
+            if (keys['ShiftLeft']) camera.position.y -= speed;
+
+            camera.quaternion.setFromEuler(new THREE.Euler(cameraPitch, cameraYaw, 0, 'YXZ'));
+        }
+
         if (!dice[0] || !dice[1] || !playerMeshes[turnIdx]) return;
         
         const midX = (dice[0].mesh.position.x + dice[1].mesh.position.x) / 2;
         const midZ = (dice[0].mesh.position.z + dice[1].mesh.position.z) / 2;
 
         // Physics Logs (Restored)
-        if (gameState === 'ROLLING') {
+        if (gameState === 'ROLLING' && !isFreeCam) {
             dice.forEach((d, i) => {
                 const vel = d.body.velocity.length();
                 const pos = d.body.position;
@@ -402,51 +469,58 @@ function animate() {
                 const offsetZ = Math.sin(angle + Math.PI/2) * (i === 0 ? -1.5 : 1.5);
                 
                 const hoverPos = new THREE.Vector3(pMesh.position.x * 0.5 + offsetX, tableHeight + 4, pMesh.position.z * 0.5 + offsetZ);
-                d.mesh.position.lerp(hoverPos, lerpFactor);
-                d.mesh.scale.lerp(new THREE.Vector3(4, 4, 4), lerpFactor); // BOSS MODE
-                d.mesh.rotation.y += 0.01;
-                d.body.position.set(d.mesh.position.x, d.mesh.position.y, d.mesh.position.z);
+                
+                if (!isFreeCam) {
+                    d.mesh.position.lerp(hoverPos, lerpFactor);
+                    d.mesh.scale.lerp(new THREE.Vector3(4, 4, 4), lerpFactor); // BOSS MODE
+                    d.mesh.rotation.y += 0.01;
+                    d.body.position.set(d.mesh.position.x, d.mesh.position.y, d.mesh.position.z);
+                }
             } else {
-                d.mesh.position.copy(d.body.position); d.mesh.quaternion.copy(d.body.quaternion);
-                d.mesh.scale.lerp(new THREE.Vector3(1, 1, 1), lerpFactor); // REALISTIC SIZE
+                if (!isFreeCam) {
+                    d.mesh.position.copy(d.body.position); d.mesh.quaternion.copy(d.body.quaternion);
+                    // Scaling logic for results/rolling
+                    if (gameState === 'RESULTS') {
+                        d.mesh.scale.lerp(new THREE.Vector3(4, 4, 4), lerpFactor);
+                    } else {
+                        d.mesh.scale.lerp(new THREE.Vector3(1, 1, 1), lerpFactor);
+                    }
+                }
             }
         });
 
         // --- POV CAMERA ORBIT ---
-        const pMesh = playerMeshes[turnIdx].mesh;
-        // Sit further back and higher for better visibility
-        const camPos = new THREE.Vector3(pMesh.position.x * 2.2, tableHeight + 8, pMesh.position.z * 2.2);
-        
-        if (gameState === 'READY' || gameState === 'SHAKING' || gameState === 'CHALLENGE_READY') {
-            camera.position.lerp(camPos, lerpFactor * 0.5);
-            camera.lookAt(0, tableHeight, 0);
-        } else if (gameState === 'ROLLING') {
-            // Adaptive Framing during roll
-            const distBetween = dice[0].mesh.position.distanceTo(dice[1].mesh.position);
-            const dynamicHeight = Math.max(tableHeight + 12, distBetween * 1.5);
-            camera.position.lerp(new THREE.Vector3(midX * 0.5, dynamicHeight, 15 + midZ * 0.5), lerpFactor);
-            camera.lookAt(midX, tableHeight, midZ);
+        if (!isFreeCam) {
+            const pMesh = playerMeshes[turnIdx].mesh;
+            // Sit further back and higher for better visibility
+            const camPos = new THREE.Vector3(pMesh.position.x * 2.2, tableHeight + 8, pMesh.position.z * 2.2);
             
-            if (dice.every(d => d.body.velocity.length() < 0.05)) {
-                settleCounter++; if (settleCounter > 40) { resolveRoll(); }
-            } else { settleCounter = 0; }
-            
-            // WHAT: Sloppy Check (Only DYNAMIC dice).
-            // RULE: Boss says no sloppy during challenges (originalRollerIdx !== -1).
-            if (originalRollerIdx === -1) {
-                if (dice.some(d => d.body.type === CANNON.Body.DYNAMIC && Math.sqrt(d.body.position.x**2 + d.body.position.z**2) > 7.0)) triggerSloppy();
+            if (gameState === 'READY' || gameState === 'SHAKING' || gameState === 'CHALLENGE_READY') {
+                camera.position.lerp(camPos, lerpFactor * 0.5);
+                camera.lookAt(0, tableHeight, 0);
+            } else if (gameState === 'ROLLING') {
+                // Adaptive Framing during roll
+                const distBetween = dice[0].mesh.position.distanceTo(dice[1].mesh.position);
+                const dynamicHeight = Math.max(tableHeight + 12, distBetween * 1.5);
+                camera.position.lerp(new THREE.Vector3(midX * 0.5, dynamicHeight, 15 + midZ * 0.5), lerpFactor);
+                camera.lookAt(midX, tableHeight, midZ);
+                
+                if (dice.every(d => d.body.velocity.length() < 0.05)) {
+                    settleCounter++; if (settleCounter > 40) { resolveRoll(); }
+                } else { settleCounter = 0; }
+                
+                // WHAT: Sloppy Check (Only DYNAMIC dice).
+                // RULE: Boss says no sloppy during challenges (originalRollerIdx !== -1).
+                if (originalRollerIdx === -1) {
+                    if (dice.some(d => d.body.type === CANNON.Body.DYNAMIC && Math.sqrt(d.body.position.x**2 + d.body.position.z**2) > 7.0)) triggerSloppy();
+                }
+            } else {
+                // Results Framing: Ensure both dice are in frame
+                const distBetween = dice[0].mesh.position.distanceTo(dice[1].mesh.position);
+                const camHeight = Math.max(tableHeight + 6, distBetween * 1.2); 
+                camera.position.lerp(new THREE.Vector3(midX, camHeight, midZ + camHeight * 0.8), lerpFactor);
+                camera.lookAt(midX, tableHeight, midZ);
             }
-        } else {
-            // Results Framing: Zoom out enough to see both, and restore BOSS MODE scale for clarity
-            const distBetween = dice[0].mesh.position.distanceTo(dice[1].mesh.position);
-            const camHeight = Math.max(tableHeight + 6, distBetween * 1.2); 
-            camera.position.lerp(new THREE.Vector3(midX, camHeight, midZ + camHeight * 0.8), lerpFactor);
-            camera.lookAt(midX, tableHeight, midZ);
-
-            dice.forEach((d, i) => {
-                d.mesh.scale.lerp(new THREE.Vector3(4, 4, 4), lerpFactor); // ZOOM BACK UP FOR RESULTS
-                d.mesh.position.copy(d.body.position); d.mesh.quaternion.copy(d.body.quaternion);
-            });
         }
         // Update HTML Label Positions
         playerMeshes.forEach(p => {
