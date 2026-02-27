@@ -159,13 +159,13 @@ rim.position.y = tableHeight + 2.0;
 scene.add(rim);
 
 // WHAT: Visual Floor Plane (Debug).
-// WHY: RESTORED at y=3.99 (just below surface) to confirm alignment.
+// WHY: Kicked down to y=3.9 to prevent surface bleeding while maintaining visibility.
 const debugFloor = new THREE.Mesh(
     new THREE.PlaneGeometry(20, 20), 
     new THREE.MeshBasicMaterial({ color: 0xff3333, transparent: true, opacity: 0.4, side: THREE.DoubleSide, visible: true })
 );
 debugFloor.rotation.x = -Math.PI / 2;
-debugFloor.position.y = tableHeight - 0.01; 
+debugFloor.position.y = 3.9; 
 scene.add(debugFloor);
 
 // Debug: Collision Cage Visualization (RESTORED Gold Wireframe)
@@ -485,6 +485,12 @@ function animate() {
                     } else {
                         d.mesh.scale.lerp(new THREE.Vector3(1, 1, 1), lerpFactor);
                     }
+
+                    // WHAT: Visual Sinking Fix (Scale-Aware).
+                    // WHY: Physics body center remains at y=4.095. Scaling visual mesh to 4x 
+                    //      lowers the bottom face unless we offset it upward.
+                    const visualOffset = 0.095 * (d.mesh.scale.x - 1);
+                    d.mesh.position.y += visualOffset;
                 }
             }
         });
