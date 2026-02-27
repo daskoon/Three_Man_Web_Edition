@@ -105,3 +105,29 @@ button:active { transform: scale(0.96); }
 #top-hud { position: absolute; top: 40px; width: 100%; display: flex; justify-content: space-around; pointer-events: none; z-index: 100; }
 #bottom-hud { position: absolute; bottom: 10vh; width: 100%; text-align: center; pointer-events: none; }
 #current-3man { color: var(--gold); }
+
+/* --- 3D FLOATING LABELS --- */
+.floating-label {
+    position: absolute;
+    transform: translate(-50%, -100%);
+    background: rgba(0, 0, 0, 0.8);
+    color: white;
+    padding: 5px 10px;
+    border-radius: 5px;
+    border: 1px solid var(--gold);
+    pointer-events: none;
+    font-size: 0.8rem;
+    text-align: center;
+    white-space: nowrap;
+    z-index: 50;
+}
+
+.floating-label strong {
+    color: var(--gold);
+}
+
+.floating-label .role-text {
+    font-size: 0.6rem;
+    opacity: 0.8;
+}
+

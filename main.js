@@ -87,6 +87,41 @@ const world = setupPhysics();
 const loader = new THREE.TextureLoader();
 const feltTex = loader.load('felt_albedo.png');
 const woodTex = loader.load('wood_albedo.png');
+const wallTex = loader.load('wall_wood.png');
+const brickTex = loader.load('wall_brick.png');
+const ceilingTex = loader.load('ceiling_tiles.png');
+const floorTex = loader.load('floor_hardwood.png');
+
+// --- BASEMENT ENVIRONMENT ---
+// Floor
+const roomFloor = new THREE.Mesh(
+    new THREE.PlaneGeometry(40, 40),
+    new THREE.MeshStandardMaterial({ map: floorTex, roughness: 0.6 })
+);
+roomFloor.rotation.x = -Math.PI / 2;
+roomFloor.position.y = -0.25; 
+scene.add(roomFloor);
+
+// Ceiling
+const roomCeiling = new THREE.Mesh(
+    new THREE.PlaneGeometry(40, 40),
+    new THREE.MeshStandardMaterial({ map: ceilingTex, roughness: 0.9 })
+);
+roomCeiling.rotation.x = Math.PI / 2;
+roomCeiling.position.y = 12;
+scene.add(roomCeiling);
+
+// Walls
+const createWall = (x, z, rotY, tex) => {
+    const wall = new THREE.Mesh(new THREE.PlaneGeometry(40, 12.25), new THREE.MeshStandardMaterial({ map: tex }));
+    wall.position.set(x, 5.875, z);
+    wall.rotation.y = rotY;
+    scene.add(wall);
+};
+createWall(0, -20, 0, wallTex); // Back
+createWall(0, 20, Math.PI, wallTex); // Front
+createWall(-20, 0, Math.PI / 2, brickTex); // Left
+createWall(20, 0, -Math.PI / 2, wallTex); // Right
 
 // Visual Table (Scaled to 7.0)
 scene.add(new THREE.Mesh(
@@ -132,9 +167,14 @@ for (let i = 0; i < numRails; i++) {
     scene.add(mesh);
 }
 
-scene.add(new THREE.AmbientLight(0xffffff, 0.4));
+scene.add(new THREE.AmbientLight(0xffffff, 0.5));
 const spot = new THREE.SpotLight(0xffd700, 3.0);
 spot.position.set(0, 15, 0); spot.castShadow = true; scene.add(spot);
+
+// Room light (Warmer center bulb)
+const bulb = new THREE.PointLight(0xffaa44, 1.0, 30);
+bulb.position.set(0, 10, 0);
+scene.add(bulb);
 
 const dieMaterials = [
     new THREE.MeshStandardMaterial({ map: createDieTexture(2, renderer) }),
@@ -171,7 +211,7 @@ function setupPlayerPresences() {
         
         const head = new THREE.Mesh(
             new THREE.SphereGeometry(0.8, 32, 32),
-            new THREE.MeshStandardMaterial({ color: 0x444444, metalness: 0.5, roughness: 0.2 })
+            new THREE.MeshStandardMaterial({ color: 0xdddddd, metalness: 0.3, roughness: 0.5 })
         );
         head.position.set(Math.sin(angle) * radius, 1.5, Math.cos(angle) * radius);
         scene.add(head);
@@ -193,7 +233,7 @@ const updateHUD = () => {
         // Base state
         let isHighlighted = false;
         let roleStr = "";
-        let hexColor = 0x222222; // Default Dark Grey
+        let hexColor = 0x666666; // Light Grey (visible)
         
         // Contextual Logic
         if (gameState === 'CHALLENGE_READY' && challengeType === 'SPLIT') {
@@ -222,7 +262,7 @@ const updateHUD = () => {
         
         // Apply Material Updates
         p.mesh.material.emissive.setHex(hexColor);
-        p.mesh.material.emissiveIntensity = isHighlighted ? 0.8 : 0.0;
+        p.mesh.material.emissiveIntensity = isHighlighted ? 0.8 : 0.2;
         
         // Update Label Text
         if (p.labelEl) {
@@ -336,14 +376,14 @@ function animate() {
             frameCount++;
         }
 
-        dice.forEach((d, i) => {
+                dice.forEach((d, i) => {
             if (gameState === 'READY' || (gameState === 'CHALLENGE_READY' && challengeType === 'SPLIT' && i > diceRolledCount)) {
                 // Hovering dice relative to current POV (Offset i to prevent Z-fighting)
                 const pMesh = playerMeshes[turnIdx].mesh;
                 const angle = playerMeshes[turnIdx].angle;
                 // Calculate an orthogonal offset so dice sit side-by-side relative to the camera
-                const offsetX = Math.cos(angle + Math.PI/2) * (i === 0 ? -1 : 1);
-                const offsetZ = Math.sin(angle + Math.PI/2) * (i === 0 ? -1 : 1);
+                const offsetX = Math.cos(angle + Math.PI/2) * (i === 0 ? -1.2 : 1.2);
+                const offsetZ = Math.sin(angle + Math.PI/2) * (i === 0 ? -1.2 : 1.2);
                 
                 const hoverPos = new THREE.Vector3(pMesh.position.x * 0.6 + offsetX, 4, pMesh.position.z * 0.6 + offsetZ);
                 d.mesh.position.lerp(hoverPos, lerpFactor);
@@ -356,14 +396,17 @@ function animate() {
 
         // --- POV CAMERA ORBIT ---
         const pMesh = playerMeshes[turnIdx].mesh;
-        // Pushed back (2.2x) and higher (y=8) for mobile visibility
+        // Sit further back and higher for better visibility
         const camPos = new THREE.Vector3(pMesh.position.x * 2.2, 8, pMesh.position.z * 2.2);
         
         if (gameState === 'READY' || gameState === 'SHAKING' || gameState === 'CHALLENGE_READY') {
             camera.position.lerp(camPos, lerpFactor * 0.5);
             camera.lookAt(0, 0, 0);
         } else if (gameState === 'ROLLING') {
-            camera.position.lerp(new THREE.Vector3(midX * 0.5, 12, 12 + midZ * 0.5), lerpFactor);
+            // Adaptive Framing during roll
+            const distBetween = dice[0].mesh.position.distanceTo(dice[1].mesh.position);
+            const dynamicHeight = Math.max(12, distBetween * 1.5);
+            camera.position.lerp(new THREE.Vector3(midX * 0.5, dynamicHeight, 15 + midZ * 0.5), lerpFactor);
             camera.lookAt(midX, 0, midZ);
             
             if (dice.every(d => d.body.velocity.length() < 0.05)) {
@@ -371,12 +414,22 @@ function animate() {
             } else { settleCounter = 0; }
             if (dice.some(d => Math.sqrt(d.body.position.x**2 + d.body.position.z**2) > 7.0)) triggerSloppy();
         } else {
-            // Close-up on Results (Frame both dice)
+            // Results Framing: Ensure both dice are in frame
             const distBetween = dice[0].mesh.position.distanceTo(dice[1].mesh.position);
-            const camHeight = Math.max(4, distBetween * 0.8); // Pull back if dice are far apart
-            camera.position.lerp(new THREE.Vector3(midX, camHeight, midZ + camHeight * 0.5), lerpFactor);
+            const camHeight = Math.max(6, distBetween * 1.2); 
+            camera.position.lerp(new THREE.Vector3(midX, camHeight, midZ + camHeight * 0.8), lerpFactor);
             camera.lookAt(midX, 0, midZ);
         }
+
+        // Update HTML Label Positions
+        playerMeshes.forEach(p => {
+            const vector = p.mesh.position.clone().project(camera);
+            const x = (vector.x * 0.5 + 0.5) * window.innerWidth;
+            const y = (vector.y * -0.5 + 0.5) * window.innerHeight;
+            p.labelEl.style.left = `${x}px`;
+            p.labelEl.style.top = `${y - 40}px`; // Offset above the head
+            p.labelEl.classList.remove('hidden');
+        });
     }
     renderer.render(scene, camera);
 }
