@@ -416,7 +416,10 @@ function animate() {
             
             // WHAT: Sloppy Check (Only DYNAMIC dice).
             // WHY: Prevents idle dice in SPLIT challenges from triggering false sloppy penalties.
-            if (dice.some(d => d.body.type === CANNON.Body.DYNAMIC && Math.sqrt(d.body.position.x**2 + d.body.position.z**2) > 7.0)) triggerSloppy();
+            // RULE: Boss says no sloppy during challenges (originalRollerIdx !== -1).
+            if (originalRollerIdx === -1) {
+                if (dice.some(d => d.body.type === CANNON.Body.DYNAMIC && Math.sqrt(d.body.position.x**2 + d.body.position.z**2) > 7.0)) triggerSloppy();
+            }
         } else {
             // Results Framing: Ensure both dice are in frame
             const distBetween = dice[0].mesh.position.distanceTo(dice[1].mesh.position);
