@@ -123,13 +123,27 @@ createWall(0, 20, Math.PI, wallTex); // Front
 createWall(-20, 0, Math.PI / 2, brickTex); // Left
 createWall(20, 0, -Math.PI / 2, wallTex); // Right
 
-// Visual Table (Scaled to 7.0)
-scene.add(new THREE.Mesh(
+// Visual Table (Elevated to 4.0m)
+const tableHeight = 4.0;
+const tableTop = new THREE.Mesh(
     new THREE.CylinderGeometry(7, 7, 0.5, 64),
     new THREE.MeshStandardMaterial({ map: feltTex, roughness: 0.8 })
-));
+);
+tableTop.position.y = tableHeight;
+scene.add(tableTop);
 
-// Visual Rim (Scaled to 7.0)
+// Table Legs
+const createLeg = (x, z) => {
+    const leg = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.2, 0.2, tableHeight + 0.25, 16),
+        new THREE.MeshStandardMaterial({ map: woodTex })
+    );
+    leg.position.set(x, (tableHeight - 0.25) / 2, z);
+    scene.add(leg);
+};
+createLeg(4, 4); createLeg(-4, 4); createLeg(4, -4); createLeg(-4, -4);
+
+// Visual Rim (Elevated)
 const rim = new THREE.Mesh(
     new THREE.CylinderGeometry(7.2, 7.2, 4.0, 64, 1, true),
     new THREE.MeshStandardMaterial({ 
@@ -141,7 +155,7 @@ const rim = new THREE.Mesh(
         opacity: 0.1 
     })
 );
-rim.position.y = 2.0;
+rim.position.y = tableHeight + 2.0;
 scene.add(rim);
 
 // WHAT: Visual Floor Plane (Debug).
@@ -151,7 +165,7 @@ const debugFloor = new THREE.Mesh(
     new THREE.MeshBasicMaterial({ color: 0xff3333, transparent: true, opacity: 0.4, side: THREE.DoubleSide, visible: false })
 );
 debugFloor.rotation.x = -Math.PI / 2;
-debugFloor.position.y = 0.31; 
+debugFloor.position.y = tableHeight + 0.31; 
 scene.add(debugFloor);
 
 // Debug: Collision Cage Visualization (Hidden)
@@ -162,18 +176,18 @@ const RAIL_HEIGHT = 4.0;
 for (let i = 0; i < numRails; i++) {
     const angle = (i / numRails) * Math.PI * 2;
     const mesh = new THREE.Mesh(new THREE.BoxGeometry(2.0, RAIL_HEIGHT, 1.0), debugRailMat);
-    mesh.position.set(Math.cos(angle) * railRadius, RAIL_HEIGHT / 2, Math.sin(angle) * railRadius);
+    mesh.position.set(Math.cos(angle) * railRadius, tableHeight + RAIL_HEIGHT / 2, Math.sin(angle) * railRadius);
     mesh.quaternion.setFromAxisAngle(new THREE.Vector3(0, 1, 0), -angle + Math.PI / 2);
     scene.add(mesh);
 }
 
 scene.add(new THREE.AmbientLight(0xffffff, 0.5));
 const spot = new THREE.SpotLight(0xffd700, 3.0);
-spot.position.set(0, 15, 0); spot.castShadow = true; scene.add(spot);
+spot.position.set(0, tableHeight + 15, 0); spot.castShadow = true; scene.add(spot);
 
 // Room light (Warmer center bulb)
 const bulb = new THREE.PointLight(0xffaa44, 1.0, 30);
-bulb.position.set(0, 10, 0);
+bulb.position.set(0, tableHeight + 10, 0);
 scene.add(bulb);
 
 const dieMaterials = [
@@ -213,7 +227,8 @@ function setupPlayerPresences() {
             new THREE.SphereGeometry(0.8, 32, 32),
             new THREE.MeshStandardMaterial({ color: 0xdddddd, metalness: 0.3, roughness: 0.5 })
         );
-        head.position.set(Math.sin(angle) * radius, 1.5, Math.cos(angle) * radius);
+        // Table at y=4.0, head elevated to 5.5
+        head.position.set(Math.sin(angle) * radius, tableHeight + 1.5, Math.cos(angle) * radius);
         scene.add(head);
 
         // 2D Floating Label
@@ -320,7 +335,7 @@ function throwDice() {
         
         // Randomize from current player's POV position
         const pMesh = playerMeshes[turnIdx].mesh;
-        d.body.position.set(pMesh.position.x * 0.5, 4, pMesh.position.z * 0.5);
+        d.body.position.set(pMesh.position.x * 0.5, tableHeight + 4, pMesh.position.z * 0.5);
         d.body.quaternion.set(Math.random(), Math.random(), Math.random(), Math.random()).normalize();
         d.body.type = CANNON.Body.DYNAMIC; d.body.mass = 1.0; d.body.updateMassProperties(); d.body.wakeUp();
 
@@ -376,7 +391,7 @@ function animate() {
             frameCount++;
         }
 
-                dice.forEach((d, i) => {
+        dice.forEach((d, i) => {
             if (gameState === 'READY' || (gameState === 'CHALLENGE_READY' && challengeType === 'SPLIT' && i > diceRolledCount)) {
                 // Hovering dice relative to current POV (Offset i to prevent Z-fighting)
                 const pMesh = playerMeshes[turnIdx].mesh;
@@ -386,7 +401,7 @@ function animate() {
                 const offsetZ = Math.sin(angle + Math.PI/2) * (i === 0 ? -0.8 : 0.8);
                 
                 // Use 0.5x radius (5.0m) to keep dice safely within the 7.0m table
-                const hoverPos = new THREE.Vector3(pMesh.position.x * 0.5 + offsetX, 4, pMesh.position.z * 0.5 + offsetZ);
+                const hoverPos = new THREE.Vector3(pMesh.position.x * 0.5 + offsetX, tableHeight + 4, pMesh.position.z * 0.5 + offsetZ);
                 d.mesh.position.lerp(hoverPos, lerpFactor);
                 d.mesh.rotation.y += 0.01;
                 d.body.position.set(d.mesh.position.x, d.mesh.position.y, d.mesh.position.z);
@@ -398,24 +413,23 @@ function animate() {
         // --- POV CAMERA ORBIT ---
         const pMesh = playerMeshes[turnIdx].mesh;
         // Sit further back and higher for better visibility
-        const camPos = new THREE.Vector3(pMesh.position.x * 2.2, 8, pMesh.position.z * 2.2);
+        const camPos = new THREE.Vector3(pMesh.position.x * 2.2, tableHeight + 8, pMesh.position.z * 2.2);
         
         if (gameState === 'READY' || gameState === 'SHAKING' || gameState === 'CHALLENGE_READY') {
             camera.position.lerp(camPos, lerpFactor * 0.5);
-            camera.lookAt(0, 0, 0);
+            camera.lookAt(0, tableHeight, 0);
         } else if (gameState === 'ROLLING') {
             // Adaptive Framing during roll
             const distBetween = dice[0].mesh.position.distanceTo(dice[1].mesh.position);
-            const dynamicHeight = Math.max(12, distBetween * 1.5);
+            const dynamicHeight = Math.max(tableHeight + 12, distBetween * 1.5);
             camera.position.lerp(new THREE.Vector3(midX * 0.5, dynamicHeight, 15 + midZ * 0.5), lerpFactor);
-            camera.lookAt(midX, 0, midZ);
+            camera.lookAt(midX, tableHeight, midZ);
             
             if (dice.every(d => d.body.velocity.length() < 0.05)) {
                 settleCounter++; if (settleCounter > 40) { resolveRoll(); }
             } else { settleCounter = 0; }
             
             // WHAT: Sloppy Check (Only DYNAMIC dice).
-            // WHY: Prevents idle dice in SPLIT challenges from triggering false sloppy penalties.
             // RULE: Boss says no sloppy during challenges (originalRollerIdx !== -1).
             if (originalRollerIdx === -1) {
                 if (dice.some(d => d.body.type === CANNON.Body.DYNAMIC && Math.sqrt(d.body.position.x**2 + d.body.position.z**2) > 7.0)) triggerSloppy();
@@ -423,11 +437,10 @@ function animate() {
         } else {
             // Results Framing: Ensure both dice are in frame
             const distBetween = dice[0].mesh.position.distanceTo(dice[1].mesh.position);
-            const camHeight = Math.max(6, distBetween * 1.2); 
+            const camHeight = Math.max(tableHeight + 6, distBetween * 1.2); 
             camera.position.lerp(new THREE.Vector3(midX, camHeight, midZ + camHeight * 0.8), lerpFactor);
-            camera.lookAt(midX, 0, midZ);
+            camera.lookAt(midX, tableHeight, midZ);
         }
-
         // Update HTML Label Positions
         playerMeshes.forEach(p => {
             const vector = p.mesh.position.clone().project(camera);

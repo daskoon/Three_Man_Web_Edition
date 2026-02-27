@@ -30,16 +30,14 @@ export function setupPhysics() {
     world.defaultContactMaterial.restitution = 0.1;
 
     // WHAT: Infinite Floor Plane.
-    // WHY: Swapped from Cylinder to Plane to prevent tunneling. 
-    // UPDATED: Raised to y=0.3 so half-height (0.3) of dice (0.6) sits on top of visual floor (y=0).
-    // HOW: Create a Plane shape and rotate it -90 degrees around the X-axis.
+    // WHY: Raised to bar-table height (4.0m) + 0.31 for dice surface alignment.
     const groundBody = new CANNON.Body({ mass: 0 });
     const groundShape = new CANNON.Plane();
     const quat = new CANNON.Quaternion();
     quat.setFromAxisAngle(new CANNON.Vec3(1, 0, 0), -Math.PI / 2);
     groundBody.addShape(groundShape, new CANNON.Vec3(0, 0, 0), quat);
-    // Raise position so dice surfaces align with visual floor at y=0
-    groundBody.position.set(0, 0.31, 0);
+    // Table surface at y=4.0
+    groundBody.position.set(0, 4.31, 0);
     world.addBody(groundBody);
 
     // WHAT: Circular Collision Rails (The "Cage").
@@ -55,7 +53,7 @@ export function setupPhysics() {
         rail.addShape(railShape);
         rail.position.set(
             Math.cos(angle) * railRadius, 
-            RAIL_HEIGHT / 2, 
+            4.0 + RAIL_HEIGHT / 2, 
             Math.sin(angle) * railRadius
         );
         rail.quaternion.setFromAxisAngle(new CANNON.Vec3(0, 1, 0), -angle + Math.PI / 2);
@@ -77,8 +75,8 @@ export function createDieBody(x, world) {
         angularDamping: 0.4
     });
     body.addShape(new CANNON.Box(new CANNON.Vec3(0.3, 0.3, 0.3)));
-    // Dice start hovering at y=6 while ready
-    body.position.set(x, 6, 6);
+    // Dice start hovering at y=8 while ready (above table at y=4)
+    body.position.set(x, 8, 6);
     world.addBody(body);
     return body;
 }
