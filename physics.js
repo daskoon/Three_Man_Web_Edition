@@ -36,8 +36,8 @@ export function setupPhysics() {
     const quat = new CANNON.Quaternion();
     quat.setFromAxisAngle(new CANNON.Vec3(1, 0, 0), -Math.PI / 2);
     groundBody.addShape(groundShape, new CANNON.Vec3(0, 0, 0), quat);
-    // Visual table top is at y=4.0 + 0.25 (half-height of 0.5 cylinder) = 4.25
-    groundBody.position.set(0, 4.25, 0);
+    // Baseline Surface at y=4.0
+    groundBody.position.set(0, 4.0, 0);
     world.addBody(groundBody);
 
     // WHAT: Circular Collision Rails (The "Cage").

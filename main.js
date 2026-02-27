@@ -123,22 +123,22 @@ createWall(0, 20, Math.PI, wallTex); // Front
 createWall(-20, 0, Math.PI / 2, brickTex); // Left
 createWall(20, 0, -Math.PI / 2, wallTex); // Right
 
-// Visual Table (Elevated to 4.0m)
-const tableHeight = 4.0;
+// Visual Table (Standardized to y=4.0 Surface)
+const tableHeight = 4.0; // The top surface
 const tableTop = new THREE.Mesh(
     new THREE.CylinderGeometry(7, 7, 0.5, 64),
     new THREE.MeshStandardMaterial({ map: feltTex, roughness: 0.8 })
 );
-tableTop.position.y = tableHeight;
+tableTop.position.y = tableHeight - 0.25; // Top face is now exactly at 4.0
 scene.add(tableTop);
 
 // Table Legs
 const createLeg = (x, z) => {
     const leg = new THREE.Mesh(
-        new THREE.CylinderGeometry(0.2, 0.2, tableHeight + 0.25, 16),
+        new THREE.CylinderGeometry(0.2, 0.2, tableHeight, 16),
         new THREE.MeshStandardMaterial({ map: woodTex })
     );
-    leg.position.set(x, (tableHeight - 0.25) / 2, z);
+    leg.position.set(x, tableHeight / 2 - 0.25, z);
     scene.add(leg);
 };
 createLeg(4, 4); createLeg(-4, 4); createLeg(4, -4); createLeg(-4, -4);
@@ -159,13 +159,13 @@ rim.position.y = tableHeight + 2.0;
 scene.add(rim);
 
 // WHAT: Visual Floor Plane (Debug).
-// WHY: RESTORED to help visualize the sinking. Set to y=4.25.
+// WHY: RESTORED at y=3.99 (just below surface) to confirm alignment.
 const debugFloor = new THREE.Mesh(
     new THREE.PlaneGeometry(20, 20), 
     new THREE.MeshBasicMaterial({ color: 0xff3333, transparent: true, opacity: 0.4, side: THREE.DoubleSide, visible: true })
 );
 debugFloor.rotation.x = -Math.PI / 2;
-debugFloor.position.y = 4.26; // Slightly above physics plane for visibility
+debugFloor.position.y = tableHeight - 0.01; 
 scene.add(debugFloor);
 
 // Debug: Collision Cage Visualization (RESTORED Gold Wireframe)
