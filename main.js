@@ -437,11 +437,16 @@ function animate() {
                 if (dice.some(d => d.body.type === CANNON.Body.DYNAMIC && Math.sqrt(d.body.position.x**2 + d.body.position.z**2) > 7.0)) triggerSloppy();
             }
         } else {
-            // Results Framing: Ensure both dice are in frame
+            // Results Framing: Zoom out enough to see both, and restore BOSS MODE scale for clarity
             const distBetween = dice[0].mesh.position.distanceTo(dice[1].mesh.position);
             const camHeight = Math.max(tableHeight + 6, distBetween * 1.2); 
             camera.position.lerp(new THREE.Vector3(midX, camHeight, midZ + camHeight * 0.8), lerpFactor);
             camera.lookAt(midX, tableHeight, midZ);
+
+            dice.forEach((d, i) => {
+                d.mesh.scale.lerp(new THREE.Vector3(4, 4, 4), lerpFactor); // ZOOM BACK UP FOR RESULTS
+                d.mesh.position.copy(d.body.position); d.mesh.quaternion.copy(d.body.quaternion);
+            });
         }
         // Update HTML Label Positions
         playerMeshes.forEach(p => {

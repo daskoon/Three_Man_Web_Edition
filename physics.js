@@ -36,8 +36,8 @@ export function setupPhysics() {
     const quat = new CANNON.Quaternion();
     quat.setFromAxisAngle(new CANNON.Vec3(1, 0, 0), -Math.PI / 2);
     groundBody.addShape(groundShape, new CANNON.Vec3(0, 0, 0), quat);
-    // Table surface at y=4.0 + 0.1 (half die height)
-    groundBody.position.set(0, 4.1, 0);
+    // Table surface at y=4.0 + 0.095 (half die height for 19mm dice)
+    groundBody.position.set(0, 4.095, 0);
     world.addBody(groundBody);
 
     // WHAT: Circular Collision Rails (The "Cage").
