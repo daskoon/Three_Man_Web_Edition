@@ -159,17 +159,17 @@ rim.position.y = tableHeight + 2.0;
 scene.add(rim);
 
 // WHAT: Visual Floor Plane (Debug).
-// WHY: Hidden.
+// WHY: RESTORED to help visualize the sinking. Set to y=4.25.
 const debugFloor = new THREE.Mesh(
     new THREE.PlaneGeometry(20, 20), 
-    new THREE.MeshBasicMaterial({ color: 0xff3333, transparent: true, opacity: 0.4, side: THREE.DoubleSide, visible: false })
+    new THREE.MeshBasicMaterial({ color: 0xff3333, transparent: true, opacity: 0.4, side: THREE.DoubleSide, visible: true })
 );
 debugFloor.rotation.x = -Math.PI / 2;
-debugFloor.position.y = tableHeight + 0.31; 
+debugFloor.position.y = 4.26; // Slightly above physics plane for visibility
 scene.add(debugFloor);
 
-// Debug: Collision Cage Visualization (Hidden)
-const debugRailMat = new THREE.MeshBasicMaterial({ color: 0xffd700, transparent: true, opacity: 0.3, wireframe: true, visible: false });
+// Debug: Collision Cage Visualization (RESTORED Gold Wireframe)
+const debugRailMat = new THREE.MeshBasicMaterial({ color: 0xffd700, transparent: true, opacity: 0.3, wireframe: true, visible: true });
 const numRails = 32;
 const railRadius = 6.8;
 const RAIL_HEIGHT = 4.0;
