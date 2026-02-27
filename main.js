@@ -382,10 +382,11 @@ function animate() {
                 const pMesh = playerMeshes[turnIdx].mesh;
                 const angle = playerMeshes[turnIdx].angle;
                 // Calculate an orthogonal offset so dice sit side-by-side relative to the camera
-                const offsetX = Math.cos(angle + Math.PI/2) * (i === 0 ? -1.2 : 1.2);
-                const offsetZ = Math.sin(angle + Math.PI/2) * (i === 0 ? -1.2 : 1.2);
+                const offsetX = Math.cos(angle + Math.PI/2) * (i === 0 ? -0.8 : 0.8);
+                const offsetZ = Math.sin(angle + Math.PI/2) * (i === 0 ? -0.8 : 0.8);
                 
-                const hoverPos = new THREE.Vector3(pMesh.position.x * 0.6 + offsetX, 4, pMesh.position.z * 0.6 + offsetZ);
+                // Use 0.5x radius (5.0m) to keep dice safely within the 7.0m table
+                const hoverPos = new THREE.Vector3(pMesh.position.x * 0.5 + offsetX, 4, pMesh.position.z * 0.5 + offsetZ);
                 d.mesh.position.lerp(hoverPos, lerpFactor);
                 d.mesh.rotation.y += 0.01;
                 d.body.position.set(d.mesh.position.x, d.mesh.position.y, d.mesh.position.z);
@@ -412,7 +413,10 @@ function animate() {
             if (dice.every(d => d.body.velocity.length() < 0.05)) {
                 settleCounter++; if (settleCounter > 40) { resolveRoll(); }
             } else { settleCounter = 0; }
-            if (dice.some(d => Math.sqrt(d.body.position.x**2 + d.body.position.z**2) > 7.0)) triggerSloppy();
+            
+            // WHAT: Sloppy Check (Only DYNAMIC dice).
+            // WHY: Prevents idle dice in SPLIT challenges from triggering false sloppy penalties.
+            if (dice.some(d => d.body.type === CANNON.Body.DYNAMIC && Math.sqrt(d.body.position.x**2 + d.body.position.z**2) > 7.0)) triggerSloppy();
         } else {
             // Results Framing: Ensure both dice are in frame
             const distBetween = dice[0].mesh.position.distanceTo(dice[1].mesh.position);
@@ -493,8 +497,20 @@ function triggerSloppy() {
     gameState = 'SLOPPY'; log(" [SYSTEM] SLOPPY TRIGGERED");
     UI.setStatus("SLOPPY! DRINK 2 & REROLL");
     vibrate([400, 200, 400, 200, 400]);
+    
     safeSetTimeout(() => { 
-        if (gameState === 'SLOPPY') { gameState = 'READY'; nextTurn(); turnIdx = (turnIdx - 1 + players.length) % players.length; } 
+        if (gameState === 'SLOPPY') {
+            if (originalRollerIdx !== -1) {
+                // Return to Challenge state
+                gameState = 'CHALLENGE_READY';
+                UI.setStatus(`${players[turnIdx].toUpperCase()}\nROLL AGAIN (SLOPPY)`);
+            } else {
+                // Return to normal turn state
+                gameState = 'READY';
+                // Roll again (don't increment turnIdx)
+                UI.setStatus(`${players[turnIdx].toUpperCase()}\nROLL AGAIN (SLOPPY)`);
+            }
+        } 
     }, 3000);
 }
 
