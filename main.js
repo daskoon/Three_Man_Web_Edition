@@ -1,16 +1,6 @@
 /**
  * @file main.js
- * @description The "Director's Cut" Orchestrator.
- * 
- * WHAT: This is the entry point of the application. It synchronizes the Three.js renderer, 
- * the Cannon-es physics world, the synthetic audio engine, and the rule evaluator.
- * 
- * UPDATED: 
- * 1. Implemented Virtual Round Table (3D Player Heads).
- * 2. Orbiting POV Camera (Changes perspective based on current roller).
- * 3. Dynamic "LEFT/RIGHT" role indicators.
- * 4. Solid Bright Red Floor Plane (Debug).
- * 5. Persistent Verbose Session Logging.
+ * @description Modularized "Director's Cut" Orchestrator.
  */
 
 import * as THREE from 'three';
@@ -20,31 +10,13 @@ import { createDieTexture, getFace } from './dice.js';
 import { setupPhysics, createDieBody } from './physics.js';
 import { evaluateRules } from './rules.js';
 import { UI } from './ui.js';
-
-// --- LOGGING SYSTEM ---
-const gameLogs = [];
-const log = (msg) => {
-    const t = new Date().toLocaleTimeString();
-    gameLogs.push(`[${t}] ${msg}`);
-    console.log(msg);
-};
-
-UI.initLogButton(() => {
-    const now = new Date();
-    const timeStr = now.toTimeString().split(' ')[0].replace(/:/g, '-');
-    const filename = `3man-session-log-${timeStr}.txt`;
-    const blob = new Blob([gameLogs.join('\n')], { type: 'text/plain' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url; a.download = filename;
-    a.click();
-    gameLogs.length = 0;
-    log("LOGS DOWNLOADED - BUFFER TRUNCATED");
-});
+import { log, initLogButton } from './logger.js';
+import { setupEnvironment, tableHeight } from './environment.js';
+import { updateCamera, handleResize, isFreeCam, setFreeCam } from './camera.js';
 
 // --- GAME STATE ---
 let players = [];
-let playerMeshes = []; // Array of { mesh, label, roleLabel }
+let playerMeshes = [];
 let turnIdx = 0;
 let threeManIdx = -1;
 let isVirgin = true;
@@ -55,12 +27,17 @@ let gameTimer = null;
 const clock = new THREE.Clock();
 const fixedTimeStep = 1 / 120;
 
-let challengeType = null; // SINGLE or SPLIT
+let challengeType = null;
 let originalRollerIdx = -1;
 let challengers = [];
-let diceRolledCount = 0; 
+let diceRolledCount = 0;
+let gameState = 'SPLASH';
 
-let gameState = 'SPLASH'; // States: SPLASH, SETUP, READY, SHAKING, ROLLING, RESULTS, DECIDING, CHALLENGE_READY
+// Input State
+const keys = {};
+let isLeftDown = false;
+let isRightDown = false;
+let movement = { x: 0, y: 0 };
 
 const vibrate = (pattern) => {
     if (typeof navigator !== 'undefined' && typeof navigator.vibrate === 'function') {
@@ -84,111 +61,8 @@ renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 renderer.shadowMap.enabled = true;
 
 const world = setupPhysics();
-const loader = new THREE.TextureLoader();
-const feltTex = loader.load('felt_albedo.png');
-const woodTex = loader.load('wood_albedo.png');
-const wallTex = loader.load('wall_wood.png');
-const brickTex = loader.load('wall_brick.png');
-const ceilingTex = loader.load('ceiling_tiles.png');
-const floorTex = loader.load('floor_hardwood.png');
-
-// --- BASEMENT ENVIRONMENT ---
-// Floor
-const roomFloor = new THREE.Mesh(
-    new THREE.PlaneGeometry(40, 40),
-    new THREE.MeshStandardMaterial({ map: floorTex, roughness: 0.6 })
-);
-roomFloor.rotation.x = -Math.PI / 2;
-roomFloor.position.y = -0.25; 
-scene.add(roomFloor);
-
-// Ceiling
-const roomCeiling = new THREE.Mesh(
-    new THREE.PlaneGeometry(40, 40),
-    new THREE.MeshStandardMaterial({ map: ceilingTex, roughness: 0.9 })
-);
-roomCeiling.rotation.x = Math.PI / 2;
-roomCeiling.position.y = 12;
-scene.add(roomCeiling);
-
-// Walls
-const createWall = (x, z, rotY, tex) => {
-    const wall = new THREE.Mesh(new THREE.PlaneGeometry(40, 12.25), new THREE.MeshStandardMaterial({ map: tex }));
-    wall.position.set(x, 5.875, z);
-    wall.rotation.y = rotY;
-    scene.add(wall);
-};
-createWall(0, -20, 0, wallTex); // Back
-createWall(0, 20, Math.PI, wallTex); // Front
-createWall(-20, 0, Math.PI / 2, brickTex); // Left
-createWall(20, 0, -Math.PI / 2, wallTex); // Right
-
-// Visual Table (Standardized to y=4.0 Surface)
-const tableHeight = 4.0; // The top surface
-const tableTop = new THREE.Mesh(
-    new THREE.CylinderGeometry(7, 7, 0.5, 64),
-    new THREE.MeshStandardMaterial({ map: feltTex, roughness: 0.8 })
-);
-tableTop.position.y = tableHeight - 0.25; // Top face is now exactly at 4.0
-scene.add(tableTop);
-
-// Table Legs
-const createLeg = (x, z) => {
-    const leg = new THREE.Mesh(
-        new THREE.CylinderGeometry(0.2, 0.2, tableHeight, 16),
-        new THREE.MeshStandardMaterial({ map: woodTex })
-    );
-    leg.position.set(x, tableHeight / 2 - 0.25, z);
-    scene.add(leg);
-};
-createLeg(4, 4); createLeg(-4, 4); createLeg(4, -4); createLeg(-4, -4);
-
-// Visual Rim (Elevated)
-const rim = new THREE.Mesh(
-    new THREE.CylinderGeometry(7.2, 7.2, 4.0, 64, 1, true),
-    new THREE.MeshStandardMaterial({ 
-        map: woodTex, 
-        roughness: 0.4, 
-        metalness: 0.3, 
-        side: THREE.DoubleSide, 
-        transparent: true, 
-        opacity: 0.1 
-    })
-);
-rim.position.y = tableHeight + 2.0;
-scene.add(rim);
-
-// WHAT: Visual Floor Plane (Debug).
-// WHY: Kicked down to y=3.9 to prevent surface bleeding while maintaining visibility.
-const debugFloor = new THREE.Mesh(
-    new THREE.PlaneGeometry(20, 20), 
-    new THREE.MeshBasicMaterial({ color: 0xff3333, transparent: true, opacity: 0.4, side: THREE.DoubleSide, visible: true })
-);
-debugFloor.rotation.x = -Math.PI / 2;
-debugFloor.position.y = 3.9; 
-scene.add(debugFloor);
-
-// Debug: Collision Cage Visualization (RESTORED Gold Wireframe)
-const debugRailMat = new THREE.MeshBasicMaterial({ color: 0xffd700, transparent: true, opacity: 0.3, wireframe: true, visible: true });
-const numRails = 32;
-const railRadius = 6.8;
-const RAIL_HEIGHT = 4.0;
-for (let i = 0; i < numRails; i++) {
-    const angle = (i / numRails) * Math.PI * 2;
-    const mesh = new THREE.Mesh(new THREE.BoxGeometry(2.0, RAIL_HEIGHT, 1.0), debugRailMat);
-    mesh.position.set(Math.cos(angle) * railRadius, tableHeight + RAIL_HEIGHT / 2, Math.sin(angle) * railRadius);
-    mesh.quaternion.setFromAxisAngle(new THREE.Vector3(0, 1, 0), -angle + Math.PI / 2);
-    scene.add(mesh);
-}
-
-scene.add(new THREE.AmbientLight(0xffffff, 0.5));
-const spot = new THREE.SpotLight(0xffd700, 3.0);
-spot.position.set(0, tableHeight + 15, 0); spot.castShadow = true; scene.add(spot);
-
-// Room light (Warmer center bulb)
-const bulb = new THREE.PointLight(0xffaa44, 1.0, 30);
-bulb.position.set(0, tableHeight + 10, 0);
-scene.add(bulb);
+setupEnvironment(scene);
+initLogButton('download-logs-btn');
 
 const dieMaterials = [
     new THREE.MeshStandardMaterial({ map: createDieTexture(2, renderer), transparent: true, opacity: 0.9 }),
@@ -205,61 +79,46 @@ const dice = [
 ];
 dice.forEach(d => { d.mesh.castShadow = true; scene.add(d.mesh); });
 
-// --- VIRTUAL ROUND TABLE LOGIC ---
-/**
- * WHAT: Player Presence Generator.
- * WHY: Creates the spheres and floating HTML labels around the table.
- */
 function setupPlayerPresences() {
-    playerMeshes.forEach(p => { 
-        scene.remove(p.mesh); 
-        if(p.labelEl) p.labelEl.remove(); 
+    playerMeshes.forEach(p => {
+        scene.remove(p.mesh);
+        if(p.labelEl) p.labelEl.remove();
     });
     playerMeshes = [];
-
-    const radius = 10.0; // Scaled for 7.0 table
+    const radius = 10.0;
     const container = document.getElementById('ui-container');
 
     players.forEach((name, i) => {
         const angle = (i / players.length) * Math.PI * 2;
-        
         const head = new THREE.Mesh(
             new THREE.SphereGeometry(0.8, 32, 32),
             new THREE.MeshStandardMaterial({ color: 0xdddddd, metalness: 0.3, roughness: 0.5 })
         );
-        // Table at y=4.0, head elevated to 5.5
         head.position.set(Math.sin(angle) * radius, tableHeight + 1.5, Math.cos(angle) * radius);
         scene.add(head);
 
-        // 2D Floating Label
         const label = document.createElement('div');
         label.className = 'floating-label hidden';
         label.innerHTML = `<strong>${name.toUpperCase()}</strong><br><span class="role-text"></span>`;
         container.appendChild(label);
-
         playerMeshes.push({ mesh: head, angle: angle, name: name, labelEl: label });
     });
 }
 
 const updateHUD = () => {
     UI.updateHUD(players[turnIdx], threeManIdx === -1 ? null : players[threeManIdx]);
-    
     playerMeshes.forEach((p, i) => {
-        // Base state
         let isHighlighted = false;
         let roleStr = "";
-        let hexColor = 0x666666; // Light Grey (visible)
-        
-        // Contextual Logic
+        let hexColor = 0x666666;
+
         if (gameState === 'CHALLENGE_READY' && challengeType === 'SPLIT') {
-            // Highlight both challengers in Split Mode
             if (challengers.includes(i)) {
                 isHighlighted = true;
-                hexColor = 0xffd700; // Gold
+                hexColor = 0xffd700;
                 roleStr = "(CHALLENGER)";
             }
         } else {
-            // Normal Turn Logic
             const isCurrent = (i === turnIdx);
             const isLeft = (i === (turnIdx - 1 + players.length) % players.length);
             const isRight = (i === (turnIdx + 1) % players.length);
@@ -274,15 +133,9 @@ const updateHUD = () => {
                 roleStr = "RIGHT (Drinks on 11)";
             }
         }
-        
-        // Apply Material Updates
         p.mesh.material.emissive.setHex(hexColor);
         p.mesh.material.emissiveIntensity = isHighlighted ? 0.8 : 0.2;
-        
-        // Update Label Text
-        if (p.labelEl) {
-            p.labelEl.querySelector('.role-text').innerText = roleStr;
-        }
+        if (p.labelEl) p.labelEl.querySelector('.role-text').innerText = roleStr;
     });
 };
 
@@ -314,7 +167,7 @@ window.removePlayer = (idx) => { players.splice(idx, 1); UI.renderPlayers(player
 const startGame = () => {
     UI.setup.classList.add('hidden');
     setupPlayerPresences();
-    turnIdx = players.length - 1; 
+    turnIdx = players.length - 1;
     nextTurn();
 };
 
@@ -329,17 +182,13 @@ function throwDice() {
     if (gameState !== 'SHAKING') return;
     log(`>>> ${players[turnIdx].toUpperCase()} ROLLS FROM POV >>>`);
     gameState = 'ROLLING'; settleCounter = 0; UI.setStatus("THROW!");
-    
+
     dice.forEach((d, i) => {
         if (challengeType === 'SPLIT' && i !== diceRolledCount) { d.body.type = CANNON.Body.STATIC; return; }
-        
-        // Randomize from current player's POV position
         const pMesh = playerMeshes[turnIdx].mesh;
         d.body.position.set(pMesh.position.x * 0.5, tableHeight + 4, pMesh.position.z * 0.5);
         d.body.quaternion.set(Math.random(), Math.random(), Math.random(), Math.random()).normalize();
         d.body.type = CANNON.Body.DYNAMIC; d.body.mass = 1.0; d.body.updateMassProperties(); d.body.wakeUp();
-
-        // Vector toward center from player seat
         const force = new CANNON.Vec3(-pMesh.position.x * 0.8, -8, -pMesh.position.z * 0.8);
         d.body.applyImpulse(force, new CANNON.Vec3(0, 0, 0));
         d.body.angularVelocity.set(Math.random()*60-30, Math.random()*60-30, Math.random()*60-30);
@@ -347,7 +196,7 @@ function throwDice() {
     vibrate(150);
 }
 
-// Listeners
+// Input Listeners
 window.addEventListener('devicemotion', (e) => {
     if (gameState !== 'READY' && gameState !== 'SHAKING' && gameState !== 'CHALLENGE_READY') return;
     const a = e.accelerationIncludingGravity; if (!a) return;
@@ -358,183 +207,99 @@ window.addEventListener('devicemotion', (e) => {
     } else if (gameState === 'SHAKING' && accelMag < 15) { throwDice(); }
 });
 
-window.onmousedown = (e) => { 
+window.onmousedown = (e) => {
     if ((gameState === 'READY' || gameState === 'CHALLENGE_READY') && e.target.tagName !== 'BUTTON') {
         gameState = 'SHAKING'; setTimeout(throwDice, 800);
     }
+    if (e.button === 0) isLeftDown = true;
+    if (e.button === 2) isRightDown = true;
 };
 
-// --- FREE CAM CONTROLS ---
-let isFreeCam = false;
-let cameraPitch = -0.3; // Initial tilt
-let cameraYaw = 0;
-const keys = {};
-let isLeftDown = false;
-let isRightDown = false;
-
-document.getElementById('freecam-btn').onclick = (e) => {
-    isFreeCam = !isFreeCam;
-    e.target.innerText = `FREE CAM: ${isFreeCam ? 'ON' : 'OFF'}`;
-    e.target.style.background = isFreeCam ? 'var(--gold)' : 'rgba(0,0,0,0.5)';
-    e.target.style.color = isFreeCam ? 'black' : 'white';
-    if (isFreeCam) {
-        cameraYaw = Math.atan2(camera.position.x, camera.position.z);
-        cameraPitch = -0.5;
-    }
+window.onmouseup = (e) => {
+    if (e.button === 0) isLeftDown = false;
+    if (e.button === 2) isRightDown = false;
 };
 
 window.addEventListener('keydown', (e) => { keys[e.code] = true; });
 window.addEventListener('keyup', (e) => { keys[e.code] = false; });
-window.addEventListener('mousedown', (e) => {
-    if (e.button === 0) isLeftDown = true;
-    if (e.button === 2) isRightDown = true;
-});
-window.addEventListener('mouseup', (e) => {
-    if (e.button === 0) isLeftDown = false;
-    if (e.button === 2) isRightDown = false;
-});
+window.addEventListener('mousemove', (e) => { movement.x = e.movementX; movement.y = e.movementY; });
 window.addEventListener('contextmenu', (e) => { if (isFreeCam) e.preventDefault(); });
-
-window.addEventListener('mousemove', (e) => {
-    if (!isFreeCam) return;
-    const sensitivity = 0.005;
-    if (isLeftDown) {
-        // Tilt (X-axis) and local Pan (simulated with Yaw for now)
-        cameraPitch -= e.movementY * sensitivity;
-        cameraYaw -= e.movementX * sensitivity;
-    } else if (isRightDown) {
-        // Pure Yaw
-        cameraYaw -= e.movementX * sensitivity;
-    }
-    cameraPitch = Math.max(-Math.PI/2, Math.min(Math.PI/2, cameraPitch));
-});
-
 window.addEventListener('wheel', (e) => {
     if (!isFreeCam) return;
     const forward = new THREE.Vector3(0, 0, -1).applyQuaternion(camera.quaternion);
     camera.position.addScaledVector(forward, -e.deltaY * 0.01);
 });
 
-/**
- * WHAT: Master Animation Loop with POV Camera.
- * WHY: Orbit the camera to the current player's seat.
- */
+document.getElementById('freecam-btn').onclick = (e) => {
+    setFreeCam(!isFreeCam);
+    e.target.innerText = `FREE CAM: ${isFreeCam ? 'ON' : 'OFF'}`;
+    e.target.style.background = isFreeCam ? 'var(--gold)' : 'rgba(0,0,0,0.5)';
+    e.target.style.color = isFreeCam ? 'black' : 'white';
+};
+
 let frameCount = 0;
 function animate() {
     requestAnimationFrame(animate);
     const dt = clock.getDelta();
     const lerpFactor = 1.0 - Math.pow(0.01, dt);
-    
+
     if (gameState !== 'SPLASH' && gameState !== 'SETUP') {
         if (!isFreeCam) {
             world.step(fixedTimeStep, dt, 20);
-        } else {
-            // Free Cam Movement (WASD)
-            const speed = 10 * dt;
-            const forward = new THREE.Vector3(0, 0, -1).applyQuaternion(camera.quaternion);
-            const right = new THREE.Vector3(1, 0, 0).applyQuaternion(camera.quaternion);
-            if (keys['KeyW']) camera.position.addScaledVector(forward, speed);
-            if (keys['KeyS']) camera.position.addScaledVector(forward, -speed);
-            if (keys['KeyA']) camera.position.addScaledVector(right, -speed);
-            if (keys['KeyD']) camera.position.addScaledVector(right, speed);
-            if (keys['Space']) camera.position.y += speed;
-            if (keys['ShiftLeft']) camera.position.y -= speed;
-
-            camera.quaternion.setFromEuler(new THREE.Euler(cameraPitch, cameraYaw, 0, 'YXZ'));
         }
 
-        if (!dice[0] || !dice[1] || !playerMeshes[turnIdx]) return;
-        
-        const midX = (dice[0].mesh.position.x + dice[1].mesh.position.x) / 2;
-        const midZ = (dice[0].mesh.position.z + dice[1].mesh.position.z) / 2;
+        updateCamera(camera, gameState, playerMeshes, turnIdx, dice, tableHeight, lerpFactor, isLeftDown, isRightDown, movement, keys, dt);
 
-        // Physics Logs (Restored)
+        if (!dice[0] || !dice[1] || !playerMeshes[turnIdx]) return;
+
+        // Physics Logs
         if (gameState === 'ROLLING' && !isFreeCam) {
             dice.forEach((d, i) => {
                 const vel = d.body.velocity.length();
-                const pos = d.body.position;
-                if (frameCount % 4 === 0) log(` [Physics] Die ${i}: ${vel.toFixed(2)} Vec3 {x: ${pos.x.toFixed(2)}, y: ${pos.y.toFixed(2)}, z: ${pos.z.toFixed(2)}}`);
+                if (frameCount % 4 === 0) log(` [Physics] Die ${i}: ${vel.toFixed(2)} Vec3`);
             });
             frameCount++;
         }
 
         dice.forEach((d, i) => {
             if (gameState === 'READY' || (gameState === 'CHALLENGE_READY' && challengeType === 'SPLIT' && i > diceRolledCount)) {
-                // Hovering dice relative to current POV (Offset i to prevent Z-fighting)
                 const pMesh = playerMeshes[turnIdx].mesh;
                 const angle = playerMeshes[turnIdx].angle;
-                
-                // Increase offset for massive 'Boss Mode' dice (4x scale)
                 const offsetX = Math.cos(angle + Math.PI/2) * (i === 0 ? -1.5 : 1.5);
                 const offsetZ = Math.sin(angle + Math.PI/2) * (i === 0 ? -1.5 : 1.5);
-                
                 const hoverPos = new THREE.Vector3(pMesh.position.x * 0.5 + offsetX, tableHeight + 4, pMesh.position.z * 0.5 + offsetZ);
-                
+
                 if (!isFreeCam) {
                     d.mesh.position.lerp(hoverPos, lerpFactor);
-                    d.mesh.scale.lerp(new THREE.Vector3(4, 4, 4), lerpFactor); // BOSS MODE
+                    d.mesh.scale.lerp(new THREE.Vector3(4, 4, 4), lerpFactor);
                     d.mesh.rotation.y += 0.01;
                     d.body.position.set(d.mesh.position.x, d.mesh.position.y, d.mesh.position.z);
                 }
             } else {
                 if (!isFreeCam) {
                     d.mesh.position.copy(d.body.position); d.mesh.quaternion.copy(d.body.quaternion);
-                    // Scaling logic for results/rolling
-                    if (gameState === 'RESULTS') {
-                        d.mesh.scale.lerp(new THREE.Vector3(4, 4, 4), lerpFactor);
-                    } else {
-                        d.mesh.scale.lerp(new THREE.Vector3(1, 1, 1), lerpFactor);
-                    }
-
-                    // WHAT: Visual Sinking Fix (Scale-Aware).
-                    // WHY: Physics body center remains at y=4.095. Scaling visual mesh to 4x 
-                    //      lowers the bottom face unless we offset it upward.
+                    if (gameState === 'RESULTS') d.mesh.scale.lerp(new THREE.Vector3(4, 4, 4), lerpFactor);
+                    else d.mesh.scale.lerp(new THREE.Vector3(1, 1, 1), lerpFactor);
                     const visualOffset = 0.095 * (d.mesh.scale.x - 1);
                     d.mesh.position.y += visualOffset;
                 }
             }
         });
 
-        // --- POV CAMERA ORBIT ---
-        if (!isFreeCam) {
-            const pMesh = playerMeshes[turnIdx].mesh;
-            // Sit further back and higher for better visibility
-            const camPos = new THREE.Vector3(pMesh.position.x * 2.2, tableHeight + 8, pMesh.position.z * 2.2);
-            
-            if (gameState === 'READY' || gameState === 'SHAKING' || gameState === 'CHALLENGE_READY') {
-                camera.position.lerp(camPos, lerpFactor * 0.5);
-                camera.lookAt(0, tableHeight, 0);
-            } else if (gameState === 'ROLLING') {
-                // Adaptive Framing during roll
-                const distBetween = dice[0].mesh.position.distanceTo(dice[1].mesh.position);
-                const dynamicHeight = Math.max(tableHeight + 12, distBetween * 1.5);
-                camera.position.lerp(new THREE.Vector3(midX * 0.5, dynamicHeight, 15 + midZ * 0.5), lerpFactor);
-                camera.lookAt(midX, tableHeight, midZ);
-                
-                if (dice.every(d => d.body.velocity.length() < 0.05)) {
-                    settleCounter++; if (settleCounter > 40) { resolveRoll(); }
-                } else { settleCounter = 0; }
-                
-                // WHAT: Sloppy Check (Only DYNAMIC dice).
-                // RULE: Boss says no sloppy during challenges (originalRollerIdx !== -1).
-                if (originalRollerIdx === -1) {
-                    if (dice.some(d => d.body.type === CANNON.Body.DYNAMIC && Math.sqrt(d.body.position.x**2 + d.body.position.z**2) > 7.0)) triggerSloppy();
-                }
-            } else {
-                // Results Framing: Ensure both dice are in frame
-                const distBetween = dice[0].mesh.position.distanceTo(dice[1].mesh.position);
-                const camHeight = Math.max(tableHeight + 6, distBetween * 1.2); 
-                camera.position.lerp(new THREE.Vector3(midX, camHeight, midZ + camHeight * 0.8), lerpFactor);
-                camera.lookAt(midX, tableHeight, midZ);
+        if (gameState === 'ROLLING' && !isFreeCam) {
+            if (dice.every(d => d.body.velocity.length() < 0.05)) {
+                settleCounter++; if (settleCounter > 40) { resolveRoll(); }
+            } else { settleCounter = 0; }
+
+            if (originalRollerIdx === -1) {
+                if (dice.some(d => d.body.type === CANNON.Body.DYNAMIC && Math.sqrt(d.body.position.x**2 + d.body.position.z**2) > 7.0)) triggerSloppy();
             }
         }
-        // Update HTML Label Positions
+
         playerMeshes.forEach(p => {
             const vector = p.mesh.position.clone().project(camera);
-            const x = (vector.x * 0.5 + 0.5) * window.innerWidth;
-            const y = (vector.y * -0.5 + 0.5) * window.innerHeight;
-            p.labelEl.style.left = `${x}px`;
-            p.labelEl.style.top = `${y - 40}px`; // Offset above the head
+            p.labelEl.style.left = `${(vector.x * 0.5 + 0.5) * window.innerWidth}px`;
+            p.labelEl.style.top = `${(vector.y * -0.5 + 0.5) * window.innerHeight - 40}px`;
             p.labelEl.classList.remove('hidden');
         });
     }
@@ -546,8 +311,8 @@ function resolveRoll() {
     const v1 = getFace(dice[0].mesh); const v2 = getFace(dice[1].mesh);
 
     if (originalRollerIdx !== -1) {
+        const won = (v1 === v2);
         if (challengeType === 'SINGLE') {
-            const won = (v1 === v2);
             const res = won ? `${players[turnIdx]} WON! ${players[originalRollerIdx]} DRINKS` : `${players[turnIdx]} FAILED! ${players[turnIdx]} DRINKS`;
             UI.setStatus(res.replace('!', '!\n')); log(`!!! CHALLENGE: ${res}`);
             turnIdx = originalRollerIdx; originalRollerIdx = -1; challengeType = null;
@@ -558,7 +323,6 @@ function resolveRoll() {
                 UI.setStatus(`${players[turnIdx].toUpperCase()}\nROLL DIE 2`);
                 log(`>>> SPLIT CHALLENGE: Die 1 is ${v1}. Waiting for ${players[turnIdx]}...`);
             } else {
-                const won = (v1 === v2);
                 const res = won ? `MATCH! ${players[originalRollerIdx]} DRINKS TWICE!` : `NO MATCH! ${players[challengers[0]]} & ${players[challengers[1]]} DRINK`;
                 UI.setStatus(res.replace('!', '!\n')); log(`!!! SPLIT CHALLENGE: ${res}`);
                 turnIdx = originalRollerIdx; originalRollerIdx = -1; challengeType = null; diceRolledCount = 0;
@@ -600,22 +364,14 @@ function triggerSloppy() {
     gameState = 'SLOPPY'; log(" [SYSTEM] SLOPPY TRIGGERED");
     UI.setStatus("SLOPPY! DRINK 2 & REROLL");
     vibrate([400, 200, 400, 200, 400]);
-    
-    safeSetTimeout(() => { 
+    safeSetTimeout(() => {
         if (gameState === 'SLOPPY') {
-            if (originalRollerIdx !== -1) {
-                // Return to Challenge state
-                gameState = 'CHALLENGE_READY';
-                UI.setStatus(`${players[turnIdx].toUpperCase()}\nROLL AGAIN (SLOPPY)`);
-            } else {
-                // Return to normal turn state
-                gameState = 'READY';
-                // Roll again (don't increment turnIdx)
-                UI.setStatus(`${players[turnIdx].toUpperCase()}\nROLL AGAIN (SLOPPY)`);
-            }
-        } 
+            if (originalRollerIdx !== -1) { gameState = 'CHALLENGE_READY'; }
+            else { gameState = 'READY'; }
+            UI.setStatus(`${players[turnIdx].toUpperCase()}\nROLL AGAIN (SLOPPY)`);
+        }
     }, 3000);
 }
 
 animate();
-window.addEventListener('resize', () => { camera.aspect = window.innerWidth/window.innerHeight; camera.updateProjectionMatrix(); renderer.setSize(window.innerWidth, window.innerHeight); });
+window.addEventListener('resize', () => handleResize(camera, renderer));
