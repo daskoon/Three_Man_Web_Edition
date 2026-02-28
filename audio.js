@@ -1,16 +1,75 @@
 /**
  * @file audio.js
- * @description Synthetic Sound Engine for Three Man.
+ * @description Premium Audio Engine for Three Man (Director's Cut).
  * 
- * WHAT: This module uses the Web Audio API to synthesize SFX in real-time.
- * WHY: To avoid high-latency asset loading and provide dynamic, pitch-shifted 
- * feedback based on physics velocities.
+ * WHAT: This module manages a pool of high-fidelity audio samples and 
+ * provides a "Web-as-Reference" architecture for future native porting.
  */
+
+class AudioPoolManager {
+    constructor(ctx) {
+        this.ctx = ctx;
+        this.samples = new Map();
+        this.lastPlayTime = new Map();
+        this.debounceMs = 50; // Prevention of "Machine Gun" effect
+    }
+
+    async loadSample(name, url) {
+        if (!this.ctx) return;
+        try {
+            const response = await fetch(url);
+            const arrayBuffer = await response.arrayBuffer();
+            const audioBuffer = await this.ctx.decodeAudioData(arrayBuffer);
+            this.samples.set(name, audioBuffer);
+            console.log(`[AudioPool] Loaded: ${name}`);
+        } catch (e) {
+            console.error(`[AudioPool] Failed to load ${name}:`, e.message);
+        }
+    }
+
+    play(name, options = {}) {
+        if (!this.ctx || !this.samples.has(name)) return;
+
+        const now = this.ctx.currentTime * 1000;
+        const lastTime = this.lastPlayTime.get(name) || 0;
+
+        // Collision Debouncing
+        if (now - lastTime < this.debounceMs) return;
+        this.lastPlayTime.set(name, now);
+
+        const buffer = this.samples.get(name);
+        const source = this.ctx.createBufferSource();
+        const gain = this.ctx.createGain();
+
+        source.buffer = buffer;
+
+        // Dynamic Pitch Randomization (+/- 10%)
+        // WHY: Makes the same sample sound like unique hits.
+        const detune = (Math.random() - 0.5) * 200; // cents
+        source.detune.value = detune;
+
+        // Volume Scaling
+        const volume = options.volume !== undefined ? options.volume : 0.5;
+        gain.gain.setValueAtTime(volume, this.ctx.currentTime);
+
+        source.connect(gain);
+        gain.connect(this.ctx.destination);
+
+        source.start(0);
+    }
+}
 
 export class DirectorAudio {
     constructor() {
         try {
             this.ctx = new (window.AudioContext || window.webkitAudioContext)();
+            this.pool = new AudioPoolManager(this.ctx);
+            
+            // CDN Assets (Kenney.nl Public Domain)
+            this.urls = {
+                CLACK: "https://gamesounds.xyz/Kenney's%20Sound%20Pack/Casino%20Audio/diceThrow1.ogg",
+                THUD: "https://gamesounds.xyz/Kenney's%20Sound%20Pack/Casino%20Audio/diceThrow2.ogg"
+            };
         } catch (e) {
             console.warn("AudioContext not supported:", e.message);
             this.ctx = null;
@@ -18,73 +77,54 @@ export class DirectorAudio {
     }
 
     /**
-     * WHY: Browsers block audio until a user interaction (like clicking "PLAY").
+     * WHY: Browsers block audio until a user interaction.
      */
     async resume() {
         if (this.ctx && this.ctx.state === 'suspended') {
             await this.ctx.resume();
         }
+        // Prefetch samples on resume
+        if (this.ctx) {
+            await Promise.all([
+                this.pool.loadSample('CLACK', this.urls.CLACK),
+                this.pool.loadSample('THUD', this.urls.THUD)
+            ]);
+        }
     }
 
     /**
-     * WHAT: Collision "Clack".
-     * WHY: Audio feedback for dice hitting rails or each other.
-     * HOW: Triangle wave oscillator with a fast frequency and gain ramp.
+     * WHAT: Collision "Clack" (Die-on-Die or Rail).
+     * WHY: Mapped to physics impact velocity.
      */
     playClack(velocity) {
-        if (!this.ctx) return;
-        const t = this.ctx.currentTime;
-        const osc = this.ctx.createOscillator();
-        const gain = this.ctx.createGain();
-        
-        osc.type = 'triangle';
-        const freq = 400 + Math.min(velocity * 100, 2000);
-        osc.frequency.setValueAtTime(freq, t);
-        osc.frequency.exponentialRampToValueAtTime(100, t + 0.1);
-        
-        const vol = Math.min(velocity / 15, 0.4);
-        gain.gain.setValueAtTime(vol, t);
-        gain.gain.exponentialRampToValueAtTime(0.001, t + 0.1);
-        
-        osc.connect(gain); gain.connect(this.ctx.destination);
-        osc.start(); osc.stop(t + 0.1);
+        if (!this.pool) return;
+        const vol = Math.min(velocity / 15, 0.6);
+        this.pool.play('CLACK', { volume: vol });
     }
 
     /**
-     * WHAT: Table "Thud".
-     * WHY: Heavy feedback for when dice settle on the table surface.
+     * WHAT: Table "Thud" (Die-on-Table).
      */
-    playThud() {
-        if (!this.ctx) return;
-        const t = this.ctx.currentTime;
-        const osc = this.ctx.createOscillator();
-        const gain = this.ctx.createGain();
-        osc.frequency.setValueAtTime(120, t);
-        osc.frequency.exponentialRampToValueAtTime(40, t + 0.1);
-        gain.gain.setValueAtTime(0.4, t);
-        gain.gain.exponentialRampToValueAtTime(0.001, t + 0.2);
-        osc.connect(gain); gain.connect(this.ctx.destination);
-        osc.start(); osc.stop(t + 0.2);
+    playThud(velocity = 10) {
+        if (!this.pool) return;
+        const vol = Math.min(velocity / 20, 0.8);
+        this.pool.play('THUD', { volume: vol });
     }
 
     /**
      * WHAT: SOCIAL! Callout.
-     * WHY: Unique synthesized tone for the 'Social' rule (Sum of 4 or Face of 4).
-     * HOW: Sawtooth wave with a downward 'womp' ramp.
+     * WHY: Keep original synthesis for unique UI tones.
      */
     playSocial() {
         if (!this.ctx) return;
         const t = this.ctx.currentTime;
         const osc = this.ctx.createOscillator();
         const gain = this.ctx.createGain();
-        
         osc.type = 'sawtooth';
         osc.frequency.setValueAtTime(200, t);
         osc.frequency.exponentialRampToValueAtTime(150, t + 0.5);
-        
         gain.gain.setValueAtTime(0.2, t);
         gain.gain.exponentialRampToValueAtTime(0.001, t + 0.6);
-        
         osc.connect(gain); gain.connect(this.ctx.destination);
         osc.start(); osc.stop(t + 0.6);
     }

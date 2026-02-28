@@ -6,6 +6,7 @@
 import * as THREE from 'three';
 import * as CANNON from 'cannon-es';
 import { DirectorAudio } from './audio.js';
+import { HapticManager } from './haptics.js';
 import { createDieTexture, getFace } from './dice.js';
 import { setupPhysics, createDieBody } from './physics.js';
 import { evaluateRules } from './rules.js';
@@ -41,9 +42,7 @@ let isRightDown = false;
 let movement = { x: 0, y: 0 };
 
 const vibrate = (pattern) => {
-    if (typeof navigator !== 'undefined' && typeof navigator.vibrate === 'function') {
-        navigator.vibrate(pattern);
-    }
+    HapticManager.vibrate(pattern);
 };
 
 const safeSetTimeout = (fn, delay) => {
@@ -108,8 +107,32 @@ function initializeGameObjects() {
             { mesh: new THREE.Mesh(new THREE.BoxGeometry(0.19, 0.19, 0.19), dieMaterials), body: createDieBody(-0.6, world) },
             { mesh: new THREE.Mesh(new THREE.BoxGeometry(0.19, 0.19, 0.19), dieMaterials), body: createDieBody(0.6, world) }
         ];
-        dice.forEach(d => { d.mesh.castShadow = true; scene.add(d.mesh); });
-        log("[System] Dice and Materials initialized.");
+        
+        dice.forEach((d, i) => {
+            d.mesh.castShadow = true;
+            scene.add(d.mesh);
+
+            // COLLISION LISTENER (Premium Audio/Haptics)
+            d.body.addEventListener('collide', (e) => {
+                if (gameState !== 'ROLLING') return;
+                
+                const velocity = e.contact.getImpactVelocityAlongNormal();
+                if (velocity < 0.5) return; // Ignore micro-jitters
+
+                // Distinguish collision types
+                const isDieOnDie = dice.some(other => other.body === e.body);
+                
+                if (isDieOnDie) {
+                    if (audio) audio.playClack(velocity);
+                    HapticManager.tick();
+                } else {
+                    if (audio) audio.playThud(velocity);
+                    HapticManager.click();
+                }
+            });
+        });
+        
+        log("[System] Dice and Materials initialized with Collision Listeners.");
     } catch (e) {
         log(`[CRITICAL] GameObject initialization failed: ${e.message}`);
     }
@@ -416,6 +439,7 @@ function animate() {
 function resolveRoll() {
     if (dice.length < 2) return;
     gameState = 'RESULTS'; if (audio) audio.playThud();
+    HapticManager.thud();
     
     // Lock physics bodies to prevent jitter during scale-up
     dice.forEach(d => {
@@ -480,7 +504,7 @@ function triggerSloppy() {
     if (gameState === 'SLOPPY') return;
     gameState = 'SLOPPY'; log(" [SYSTEM] SLOPPY TRIGGERED");
     UI.setStatus("SLOPPY! DRINK 2 & REROLL");
-    vibrate([400, 200, 400, 200, 400]);
+    HapticManager.error();
     safeSetTimeout(() => {
         if (gameState === 'SLOPPY') {
             if (originalRollerIdx !== -1) { gameState = 'CHALLENGE_READY'; }
