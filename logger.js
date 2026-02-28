@@ -13,8 +13,7 @@ export const initLogButton = (buttonId) => {
         const now = new Date();
         const timeStr = now.toTimeString().split(' ')[0].replace(/:/g, '-');
         const filename = `3man-session-log-${timeStr}.txt`;
-        const blob = new Blob([gameLogs.join('
-')], { type: 'text/plain' });
+        const blob = new Blob([gameLogs.join('\n')], { type: 'text/plain' });
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url; a.download = filename;

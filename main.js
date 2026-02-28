@@ -51,33 +51,70 @@ const safeSetTimeout = (fn, delay) => {
 };
 
 // --- 3D ENGINE INITIALIZATION ---
-const scene = new THREE.Scene();
-scene.background = new THREE.Color(0x050505);
-scene.fog = new THREE.FogExp2(0x050505, 0.02);
-const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 100);
-const renderer = new THREE.WebGLRenderer({ canvas: document.getElementById('game-canvas'), antialias: true });
-renderer.setSize(window.innerWidth, window.innerHeight);
-renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-renderer.shadowMap.enabled = true;
+let scene, camera, renderer, world;
 
-const world = setupPhysics();
-setupEnvironment(scene);
-initLogButton('download-logs-btn');
+try {
+    scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x050505);
+    scene.fog = new THREE.FogExp2(0x050505, 0.02);
+    camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 100);
+    
+    const canvas = document.getElementById('game-canvas');
+    if (!canvas) throw new Error("Canvas element 'game-canvas' not found!");
+    
+    renderer = new THREE.WebGLRenderer({ canvas: canvas, antialias: true });
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.shadowMap.enabled = true;
+    log("[System] Three.js Renderer initialized.");
+} catch (e) {
+    log(`[CRITICAL] Renderer initialization failed: ${e.message}`);
+    alert("WebGL initialization failed! Please check your browser support.");
+}
 
-const dieMaterials = [
-    new THREE.MeshStandardMaterial({ map: createDieTexture(2, renderer), transparent: true, opacity: 0.9 }),
-    new THREE.MeshStandardMaterial({ map: createDieTexture(5, renderer), transparent: true, opacity: 0.9 }),
-    new THREE.MeshStandardMaterial({ map: createDieTexture(1, renderer), transparent: true, opacity: 0.9 }),
-    new THREE.MeshStandardMaterial({ map: createDieTexture(6, renderer), transparent: true, opacity: 0.9 }),
-    new THREE.MeshStandardMaterial({ map: createDieTexture(3, renderer), transparent: true, opacity: 0.9 }),
-    new THREE.MeshStandardMaterial({ map: createDieTexture(4, renderer), transparent: true, opacity: 0.9 })
-];
+try {
+    world = setupPhysics();
+    setupEnvironment(scene);
+    initLogButton('download-logs-btn');
+    log("[System] Physics and Environment setup complete.");
+} catch (e) {
+    log(`[CRITICAL] Setup failed: ${e.message}`);
+}
 
-const dice = [
-    { mesh: new THREE.Mesh(new THREE.BoxGeometry(0.19, 0.19, 0.19), dieMaterials), body: createDieBody(-0.6, world) },
-    { mesh: new THREE.Mesh(new THREE.BoxGeometry(0.19, 0.19, 0.19), dieMaterials), body: createDieBody(0.6, world) }
-];
-dice.forEach(d => { d.mesh.castShadow = true; scene.add(d.mesh); });
+window.onerror = (msg, url, line) => {
+    log(`[Unhandled Error] ${msg} at ${url}:${line}`);
+    return false;
+};
+
+// --- HANDLERS ---
+let dieMaterials = [];
+let dice = [];
+
+function initializeGameObjects() {
+    try {
+        if (!renderer || !world) return;
+        
+        dieMaterials = [
+            new THREE.MeshStandardMaterial({ map: createDieTexture(2, renderer), transparent: true, opacity: 0.9 }),
+            new THREE.MeshStandardMaterial({ map: createDieTexture(5, renderer), transparent: true, opacity: 0.9 }),
+            new THREE.MeshStandardMaterial({ map: createDieTexture(1, renderer), transparent: true, opacity: 0.9 }),
+            new THREE.MeshStandardMaterial({ map: createDieTexture(6, renderer), transparent: true, opacity: 0.9 }),
+            new THREE.MeshStandardMaterial({ map: createDieTexture(3, renderer), transparent: true, opacity: 0.9 }),
+            new THREE.MeshStandardMaterial({ map: createDieTexture(4, renderer), transparent: true, opacity: 0.9 })
+        ];
+
+        dice = [
+            { mesh: new THREE.Mesh(new THREE.BoxGeometry(0.19, 0.19, 0.19), dieMaterials), body: createDieBody(-0.6, world) },
+            { mesh: new THREE.Mesh(new THREE.BoxGeometry(0.19, 0.19, 0.19), dieMaterials), body: createDieBody(0.6, world) }
+        ];
+        dice.forEach(d => { d.mesh.castShadow = true; scene.add(d.mesh); });
+        log("[System] Dice and Materials initialized.");
+    } catch (e) {
+        log(`[CRITICAL] GameObject initialization failed: ${e.message}`);
+    }
+}
+
+// Initial call removed - moving into init-btn for safety
 
 function setupPlayerPresences() {
     playerMeshes.forEach(p => {
@@ -148,12 +185,44 @@ const nextTurn = () => {
     UI.setShame(false);
 };
 
-// --- HANDLERS ---
-document.getElementById('init-btn').onclick = async () => {
-    if (typeof DeviceMotionEvent !== 'undefined' && typeof DeviceMotionEvent.requestPermission === 'function') await DeviceMotionEvent.requestPermission();
-    audio = new DirectorAudio(); await audio.resume();
-    UI.splash.classList.add('hidden'); UI.setup.classList.remove('hidden');
+document.getElementById('init-btn').onclick = async (e) => {
+    const btn = e.target;
+    const originalText = btn.innerText;
+    btn.innerText = "LOADING...";
+    btn.disabled = true;
+    log("[System] PLAY button clicked. Initializing...");
+    
+    try {
+        if (typeof DeviceMotionEvent !== 'undefined' && typeof DeviceMotionEvent.requestPermission === 'function') {
+            log("[System] Requesting motion permissions...");
+            await DeviceMotionEvent.requestPermission();
+        }
+    } catch (err) {
+        log(`[Warning] Motion permission error: ${err.message}`);
+    }
+
+    try {
+        log("[System] Initializing audio...");
+        audio = new DirectorAudio();
+        await audio.resume();
+    } catch (err) {
+        log(`[Warning] Audio initialization failed: ${err.message}`);
+    }
+
+    // Ensure objects are initialized before moving to SETUP
+    initializeGameObjects();
+    
+    if (dice.length < 2) {
+        log("[CRITICAL] Game objects failed to initialize.");
+        btn.innerText = "ERROR - RETRY?";
+        btn.disabled = false;
+        return;
+    }
+    
+    UI.splash.classList.add('hidden');
+    UI.setup.classList.remove('hidden');
     gameState = 'SETUP';
+    log("[System] Transitioned to SETUP state.");
 };
 
 document.getElementById('add-player-btn').onclick = () => {
@@ -180,6 +249,11 @@ document.getElementById('quick-play-btn').onclick = () => {
 
 function throwDice() {
     if (gameState !== 'SHAKING') return;
+    if (dice.length < 2) {
+        log("[Error] Cannot throw dice: Dice not initialized!");
+        gameState = 'READY';
+        return;
+    }
     log(`>>> ${players[turnIdx].toUpperCase()} ROLLS FROM POV >>>`);
     gameState = 'ROLLING'; settleCounter = 0; UI.setStatus("THROW!");
 
@@ -307,7 +381,8 @@ function animate() {
 }
 
 function resolveRoll() {
-    gameState = 'RESULTS'; audio.playThud();
+    if (dice.length < 2) return;
+    gameState = 'RESULTS'; if (audio) audio.playThud();
     const v1 = getFace(dice[0].mesh); const v2 = getFace(dice[1].mesh);
 
     if (originalRollerIdx !== -1) {
@@ -332,7 +407,7 @@ function resolveRoll() {
     } else {
         const { events, newThreeManIdx, threeManPenalty, isDoubles } = evaluateRules(v1, v2, players, turnIdx, threeManIdx, isVirgin);
         if (threeManPenalty) UI.setShame(true);
-        if (events.some(e => e.includes("SOCIAL"))) audio.playSocial();
+        if (audio && events.some(e => e.includes("SOCIAL"))) audio.playSocial();
         threeManIdx = newThreeManIdx;
         const statusStr = `ROLLED ${v1} & ${v2}\n${events.join(' | ')}`;
         UI.setStatus(statusStr); log(`!!! ROLL RESULT: ${statusStr.replace('\n', ' | ')}`);

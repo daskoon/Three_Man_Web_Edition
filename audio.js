@@ -9,14 +9,19 @@
 
 export class DirectorAudio {
     constructor() {
-        this.ctx = new (window.AudioContext || window.webkitAudioContext)();
+        try {
+            this.ctx = new (window.AudioContext || window.webkitAudioContext)();
+        } catch (e) {
+            console.warn("AudioContext not supported:", e.message);
+            this.ctx = null;
+        }
     }
 
     /**
      * WHY: Browsers block audio until a user interaction (like clicking "PLAY").
      */
     async resume() {
-        if (this.ctx.state === 'suspended') {
+        if (this.ctx && this.ctx.state === 'suspended') {
             await this.ctx.resume();
         }
     }
@@ -27,7 +32,7 @@ export class DirectorAudio {
      * HOW: Triangle wave oscillator with a fast frequency and gain ramp.
      */
     playClack(velocity) {
-        if (this.ctx.state === 'suspended') return;
+        if (!this.ctx) return;
         const t = this.ctx.currentTime;
         const osc = this.ctx.createOscillator();
         const gain = this.ctx.createGain();
@@ -50,7 +55,7 @@ export class DirectorAudio {
      * WHY: Heavy feedback for when dice settle on the table surface.
      */
     playThud() {
-        if (this.ctx.state === 'suspended') return;
+        if (!this.ctx) return;
         const t = this.ctx.currentTime;
         const osc = this.ctx.createOscillator();
         const gain = this.ctx.createGain();
@@ -68,7 +73,7 @@ export class DirectorAudio {
      * HOW: Sawtooth wave with a downward 'womp' ramp.
      */
     playSocial() {
-        if (this.ctx.state === 'suspended') return;
+        if (!this.ctx) return;
         const t = this.ctx.currentTime;
         const osc = this.ctx.createOscillator();
         const gain = this.ctx.createGain();
