@@ -12,7 +12,8 @@ export function setupEnvironment(scene) {
     const floorTex = loader.load('floor_hardwood.png');
 
     // --- BASEMENT ENVIRONMENT ---
-    // Floor
+    // Floor (The "Red" floor - visually removed as requested)
+    /*
     const roomFloor = new THREE.Mesh(
         new THREE.PlaneGeometry(40, 40),
         new THREE.MeshStandardMaterial({ map: floorTex, roughness: 0.6 })
@@ -20,6 +21,7 @@ export function setupEnvironment(scene) {
     roomFloor.rotation.x = -Math.PI / 2;
     roomFloor.position.y = -0.25;
     scene.add(roomFloor);
+    */
 
     // Ceiling
     const roomCeiling = new THREE.Mesh(
@@ -47,6 +49,7 @@ export function setupEnvironment(scene) {
         new THREE.CylinderGeometry(7, 7, 0.5, 64),
         new THREE.MeshStandardMaterial({ map: feltTex, roughness: 0.8 })
     );
+    // Position center at 3.75 so the top surface is exactly at 4.0 (matching physics)
     tableTop.position.y = tableHeight - 0.25;
     scene.add(tableTop);
 

@@ -29,14 +29,15 @@ export function setupPhysics() {
     world.defaultContactMaterial.friction = 0.4;
     world.defaultContactMaterial.restitution = 0.55;
 
-    // WHAT: Infinite Floor Plane.
-    // WHY: Raised to bar-table height (4.0m) + offset for 19mm dice.
+    // WHAT: Table "Floor" (Infinite Collision Plane).
+    // WHY: Catches the dice at table height (y=4.0) to prevent them falling infinitely.
+    // This is the physical surface for the felt.
     const groundBody = new CANNON.Body({ mass: 0 });
     const groundShape = new CANNON.Plane();
     const quat = new CANNON.Quaternion();
-    quat.setFromAxisAngle(new CANNON.Vec3(1, 0, 0), -Math.PI / 2);
+    quat.setFromAxisAngle(new CANNON.Vec3(1, 0, 0), -Math.PI / 2); // Rotate to be horizontal
     groundBody.addShape(groundShape, new CANNON.Vec3(0, 0, 0), quat);
-    // Baseline Surface at y=4.0
+    // Baseline Surface top is exactly at y=4.0.
     groundBody.position.set(0, 4.0, 0);
     world.addBody(groundBody);
 

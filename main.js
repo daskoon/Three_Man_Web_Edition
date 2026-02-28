@@ -260,10 +260,20 @@ function throwDice() {
     dice.forEach((d, i) => {
         if (challengeType === 'SPLIT' && i !== diceRolledCount) { d.body.type = CANNON.Body.STATIC; return; }
         const pMesh = playerMeshes[turnIdx].mesh;
+        // Start position slightly in front of the player
         d.body.position.set(pMesh.position.x * 0.5, tableHeight + 4, pMesh.position.z * 0.5);
         d.body.quaternion.set(Math.random(), Math.random(), Math.random(), Math.random()).normalize();
         d.body.type = CANNON.Body.DYNAMIC; d.body.mass = 1.0; d.body.updateMassProperties(); d.body.wakeUp();
-        const force = new CANNON.Vec3(-pMesh.position.x * 0.8, -8, -pMesh.position.z * 0.8);
+        
+        // WHAT: Impulse calculation for "Forward Momentum".
+        // WHY: Adding random spread and stronger inward force to simulate a "toss" towards the center.
+        const spreadX = (Math.random() - 0.5) * 2;
+        const spreadZ = (Math.random() - 0.5) * 2;
+        const force = new CANNON.Vec3(
+            -pMesh.position.x * 1.5 + spreadX, 
+            -15, 
+            -pMesh.position.z * 1.5 + spreadZ
+        );
         d.body.applyImpulse(force, new CANNON.Vec3(0, 0, 0));
         d.body.angularVelocity.set(Math.random()*60-30, Math.random()*60-30, Math.random()*60-30);
     });
@@ -339,8 +349,10 @@ function animate() {
             if (gameState === 'READY' || (gameState === 'CHALLENGE_READY' && challengeType === 'SPLIT' && i > diceRolledCount)) {
                 const pMesh = playerMeshes[turnIdx].mesh;
                 const angle = playerMeshes[turnIdx].angle;
-                const offsetX = Math.cos(angle + Math.PI/2) * (i === 0 ? -1.5 : 1.5);
-                const offsetZ = Math.sin(angle + Math.PI/2) * (i === 0 ? -1.5 : 1.5);
+                // Side-by-side relative to player's view (angle + 90 deg)
+                // Use a smaller offset (0.6 instead of 1.5) since dice are scaled up.
+                const offsetX = Math.cos(angle + Math.PI/2) * (i === 0 ? -0.6 : 0.6);
+                const offsetZ = Math.sin(angle + Math.PI/2) * (i === 0 ? -0.6 : 0.6);
                 const hoverPos = new THREE.Vector3(pMesh.position.x * 0.5 + offsetX, tableHeight + 4, pMesh.position.z * 0.5 + offsetZ);
 
                 if (!isFreeCam) {
