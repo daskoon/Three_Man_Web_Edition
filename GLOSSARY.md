@@ -4,8 +4,8 @@ This document defines the specific terminology and spatial references used in th
 
 ## 1. Spatial References (Coordinates)
 *   **The Baseline (y=4.0):** This is the height of the table surface. All primary action happens at this level.
-*   **The Floor (y=4.0):** When referring to "The Floor" or "Table Floor," we mean the **Infinite Collision Plane** at y=4.0. This catches the dice and acts as the felt surface.
-*   **The Room Floor (y=-0.25):** The visual hardwood floor at the bottom of the 3D room. (Currently visually removed/hidden).
+*   **The Floor (y=4.0):** When referring to "The Floor" or "Table Floor," we mean the **Infinite Collision Plane** at y=4.0. This catches the dice and acts as the felt surface. It is visually represented by a **Red Semi-Translucent Plane** at y=3.99.
+*   **The Room Floor (y=-0.25):** The **Red Semi-Translucent Plane** at the bottom of the room, acting as a secondary catch-all visual.
 *   **The Ceiling (y=12.0):** The top of the room box.
 *   **The Hand (y=8.0):** The hovering position where dice wait side-by-side during the `READY` state.
 

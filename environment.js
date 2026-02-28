@@ -12,16 +12,24 @@ export function setupEnvironment(scene) {
     const floorTex = loader.load('floor_hardwood.png');
 
     // --- BASEMENT ENVIRONMENT ---
-    // Floor (The "Red" floor - visually removed as requested)
-    /*
+    // Room Floor (Red Semi-Translucent as requested)
     const roomFloor = new THREE.Mesh(
         new THREE.PlaneGeometry(40, 40),
-        new THREE.MeshStandardMaterial({ map: floorTex, roughness: 0.6 })
+        new THREE.MeshStandardMaterial({ color: 0xff0000, transparent: true, opacity: 0.3, roughness: 0.6 })
     );
     roomFloor.rotation.x = -Math.PI / 2;
     roomFloor.position.y = -0.25;
     scene.add(roomFloor);
-    */
+
+    // Visual Table Floor (Red Semi-Translucent)
+    // Positioned slightly below y=4.0 to prevent Z-fighting with the felt
+    const tableFloor = new THREE.Mesh(
+        new THREE.PlaneGeometry(20, 20),
+        new THREE.MeshStandardMaterial({ color: 0xff0000, transparent: true, opacity: 0.5 })
+    );
+    tableFloor.rotation.x = -Math.PI / 2;
+    tableFloor.position.y = 3.99;
+    scene.add(tableFloor);
 
     // Ceiling
     const roomCeiling = new THREE.Mesh(
