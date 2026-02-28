@@ -10,7 +10,7 @@ This document defines the specific terminology and spatial references used in th
 *   **The Hand (y=8.0):** The hovering position where dice wait side-by-side during the `READY` state.
 
 ## 2. Objects & Geometry
-*   **The Rails:** The circular/octagonal gold collision "cage" surrounding the table. These keep the dice from flying off the table.
+*   **The Rails:** The circular/octagonal gold collision "cage" surrounding the table. Reduced to 0.5m height (1/8 of original) to allow for "Sloppy" hops. These keep the dice from flying off the table under normal conditions.
 *   **The Felt:** The visual top of the table (`tableTop`). It must always align perfectly with the **Floor** (y=4.0) to prevent dice from sinking or floating.
 *   **The Rim:** The thin wooden visual cylinder surrounding the table.
 *   **The Die (19mm):** A standard casino-grade cube. Visually scaled up by 4x during the `READY` and `RESULTS` states for readability.

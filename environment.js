@@ -74,7 +74,7 @@ export function setupEnvironment(scene) {
 
     // Visual Rim
     const rim = new THREE.Mesh(
-        new THREE.CylinderGeometry(7.2, 7.2, 4.0, 64, 1, true),
+        new THREE.CylinderGeometry(7.2, 7.2, 0.5, 64, 1, true),
         new THREE.MeshStandardMaterial({
             map: woodTex,
             roughness: 0.4,
@@ -84,14 +84,15 @@ export function setupEnvironment(scene) {
             opacity: 0.1
         })
     );
-    rim.position.y = tableHeight + 2.0;
+    // Center at 4.25 so the bottom edge is at y=4.0
+    rim.position.y = tableHeight + 0.25;
     scene.add(rim);
 
     // Debug: Collision Cage Visualization
     const debugRailMat = new THREE.MeshBasicMaterial({ color: 0xffd700, transparent: true, opacity: 0.3, wireframe: true });
     const numRails = 32;
     const railRadius = 6.8;
-    const RAIL_HEIGHT = 4.0;
+    const RAIL_HEIGHT = 0.5;
     for (let i = 0; i < numRails; i++) {
         const angle = (i / numRails) * Math.PI * 2;
         const mesh = new THREE.Mesh(new THREE.BoxGeometry(2.0, RAIL_HEIGHT, 1.0), debugRailMat);

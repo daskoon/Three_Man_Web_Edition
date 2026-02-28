@@ -42,10 +42,10 @@ export function setupPhysics() {
     world.addBody(groundBody);
 
     // WHAT: Circular Collision Rails (The "Cage").
-    // WHY: Scaled to 7.0 radius for better mobile perspective.
+    // WHY: Reduced to 1/8 original height (0.5m) to allow for "Sloppy" hops.
     const numRails = 32;
     const railRadius = 6.8;
-    const RAIL_HEIGHT = 4.0; 
+    const RAIL_HEIGHT = 0.5; 
     for (let i = 0; i < numRails; i++) {
         const angle = (i / numRails) * Math.PI * 2;
         const rail = new CANNON.Body({ mass: 0 });
