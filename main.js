@@ -21,7 +21,8 @@ let turnIdx = 0;
 let threeManIdx = -1;
 let isVirgin = true;
 let audio;
-let settleCounter = 0;
+let settleTimer = 0; // Changed from settleCounter to timer (seconds)
+let rollStartTime = 0; // For hard fallback
 let accelMag = 0;
 let gameTimer = null;
 const clock = new THREE.Clock();
@@ -255,7 +256,10 @@ function throwDice() {
         return;
     }
     log(`>>> ${players[turnIdx].toUpperCase()} ROLLS FROM POV >>>`);
-    gameState = 'ROLLING'; settleCounter = 0; UI.setStatus("THROW!");
+    gameState = 'ROLLING'; 
+    settleTimer = 0; 
+    rollStartTime = performance.now(); // Start tracking roll duration
+    UI.setStatus("THROW!");
 
     dice.forEach((d, i) => {
         if (challengeType === 'SPLIT' && i !== diceRolledCount) { d.body.type = CANNON.Body.STATIC; return; }
@@ -373,9 +377,26 @@ function animate() {
         });
 
         if (gameState === 'ROLLING' && !isFreeCam) {
-            if (dice.every(d => d.body.velocity.length() < 0.05)) {
-                settleCounter++; if (settleCounter > 40) { resolveRoll(); }
-            } else { settleCounter = 0; }
+            const isStopped = dice.every(d => 
+                d.body.velocity.length() < 0.2 && 
+                d.body.angularVelocity.length() < 0.3
+            );
+
+            if (isStopped) {
+                settleTimer += dt;
+                if (settleTimer > 0.5) { // Require 0.5s of stability
+                    log("[System] Dice settled naturally.");
+                    resolveRoll();
+                }
+            } else {
+                settleTimer = 0;
+            }
+
+            // Hard Fallback: Force resolution after 8 seconds
+            if (performance.now() - rollStartTime > 8000) {
+                log("[Warning] Roll duration exceeded 8s. Forcing resolution...");
+                resolveRoll();
+            }
 
             if (originalRollerIdx === -1) {
                 if (dice.some(d => d.body.type === CANNON.Body.DYNAMIC && Math.sqrt(d.body.position.x**2 + d.body.position.z**2) > 7.0)) triggerSloppy();
