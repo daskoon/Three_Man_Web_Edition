@@ -349,10 +349,10 @@ function animate() {
             if (gameState === 'READY' || (gameState === 'CHALLENGE_READY' && challengeType === 'SPLIT' && i > diceRolledCount)) {
                 const pMesh = playerMeshes[turnIdx].mesh;
                 const angle = playerMeshes[turnIdx].angle;
-                // Side-by-side relative to player's view (angle + 90 deg)
-                // Use a smaller offset (0.6 instead of 1.5) since dice are scaled up.
-                const offsetX = Math.cos(angle + Math.PI/2) * (i === 0 ? -0.6 : 0.6);
-                const offsetZ = Math.sin(angle + Math.PI/2) * (i === 0 ? -0.6 : 0.6);
+                // Side-by-side relative to player's view (tangent to the circle)
+                // Tangent vector to (sin(a), cos(a)) is (cos(a), -sin(a))
+                const offsetX = Math.cos(angle) * (i === 0 ? -0.8 : 0.8);
+                const offsetZ = -Math.sin(angle) * (i === 0 ? -0.8 : 0.8);
                 const hoverPos = new THREE.Vector3(pMesh.position.x * 0.5 + offsetX, tableHeight + 4, pMesh.position.z * 0.5 + offsetZ);
 
                 if (!isFreeCam) {
