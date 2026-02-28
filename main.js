@@ -378,13 +378,13 @@ function animate() {
 
         if (gameState === 'ROLLING' && !isFreeCam) {
             const isStopped = dice.every(d => 
-                d.body.velocity.length() < 0.2 && 
-                d.body.angularVelocity.length() < 0.3
+                d.body.velocity.length() < 0.1 && 
+                d.body.angularVelocity.length() < 0.2
             );
 
             if (isStopped) {
                 settleTimer += dt;
-                if (settleTimer > 0.5) { // Require 0.5s of stability
+                if (settleTimer > 0.8) { // Require 0.8s of total stability
                     log("[System] Dice settled naturally.");
                     resolveRoll();
                 }
@@ -416,6 +416,15 @@ function animate() {
 function resolveRoll() {
     if (dice.length < 2) return;
     gameState = 'RESULTS'; if (audio) audio.playThud();
+    
+    // Lock physics bodies to prevent jitter during scale-up
+    dice.forEach(d => {
+        d.body.velocity.set(0, 0, 0);
+        d.body.angularVelocity.set(0, 0, 0);
+        d.body.type = CANNON.Body.STATIC;
+        d.body.updateMassProperties();
+    });
+
     const v1 = getFace(dice[0].mesh); const v2 = getFace(dice[1].mesh);
 
     if (originalRollerIdx !== -1) {
