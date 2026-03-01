@@ -96,7 +96,7 @@ try {
     const phys = setupPhysics();
     world = phys.world;
     setupEnvironment(scene);
-    initLogButton(() => {}); 
+    initLogButton('download-logs-btn');
     log("[System] Physics and Environment setup complete.");
 } catch (e) {
     log(`[CRITICAL] Setup failed: ${e.message}`);
@@ -436,7 +436,14 @@ function resolveRoll() {
         // WHY: To clearly differentiate core rules from custom 'Snake Eyes' laws.
         let statusStr = `ROLLED ${v1} & ${v2}\n${events.join(' | ')}`;
         if (triggeredLaws && triggeredLaws.length > 0) {
-            statusStr = `LAW ENFORCED:\n${triggeredLaws.join('\n')}`;
+            // Append explicit penalties so players know who needs to drink for the laws
+            const lawPenalties = penalties.filter(p => p.reason === "CUSTOM LAW");
+            const lawActionStrings = lawPenalties.map(p => `${p.name} DRINKS ${p.count}`);
+            if (lawActionStrings.length > 0) {
+                statusStr += `\nLAW ENFORCED: ${lawActionStrings.join(', ')}`;
+            } else {
+                statusStr += `\nLAW ENFORCED:\n${triggeredLaws.join('\n')}`;
+            }
         }
         
         UI.setStatus(statusStr); 
