@@ -120,13 +120,23 @@ function initializeGameObjects() {
                 if (velocity < 0.5) return; // Ignore micro-jitters
 
                 // Distinguish collision types
-                const isDieOnDie = dice.some(other => other.body === e.body);
+                const otherBody = e.body;
+                const isDieOnDie = dice.some(other => other.body === otherBody);
                 
+                // Identify Rails (Wood) vs Floor (Felt)
+                // The Floor is the only body at y=4.0 with infinite plane or large mass
+                const isFloor = otherBody.position.y === 4.0;
+                const isRail = !isDieOnDie && !isFloor;
+
                 if (isDieOnDie) {
                     if (audio) audio.playClack(velocity);
                     HapticManager.tick();
+                } else if (isRail) {
+                    if (audio) audio.playWood(velocity);
+                    HapticManager.click();
                 } else {
-                    if (audio) audio.playThud(velocity);
+                    // Floor / Felt
+                    if (audio) audio.playFelt(velocity);
                     HapticManager.click();
                 }
             });

@@ -44,9 +44,10 @@ class AudioPoolManager {
         source.buffer = buffer;
 
         // Dynamic Pitch Randomization (+/- 10%)
-        // WHY: Makes the same sample sound like unique hits.
-        const detune = (Math.random() - 0.5) * 200; // cents
-        source.detune.value = detune;
+        // detune: base shift provided by material (felt vs wood)
+        const baseDetune = options.detune || 0;
+        const jitter = (Math.random() - 0.5) * 200; // cents
+        source.detune.value = baseDetune + jitter;
 
         // Volume Scaling
         const volume = options.volume !== undefined ? options.volume : 0.5;
@@ -93,22 +94,34 @@ export class DirectorAudio {
     }
 
     /**
-     * WHAT: Collision "Clack" (Die-on-Die or Rail).
-     * WHY: Mapped to physics impact velocity.
+     * WHAT: Table "Felt" Thud.
+     * WHY: Muffled low-frequency hit.
+     */
+    playFelt(velocity) {
+        if (!this.pool) return;
+        const vol = Math.min(velocity / 25, 0.5);
+        // Randomize pitch slightly lower for felt
+        this.pool.play('THUD', { volume: vol, detune: -200 });
+    }
+
+    /**
+     * WHAT: Rail "Wood" Clack.
+     * WHY: Sharp, high-frequency impact.
+     */
+    playWood(velocity) {
+        if (!this.pool) return;
+        const vol = Math.min(velocity / 15, 0.7);
+        // Randomize pitch slightly higher for wood
+        this.pool.play('CLACK', { volume: vol, detune: 200 });
+    }
+
+    /**
+     * WHAT: Dice-on-Dice "Clack".
      */
     playClack(velocity) {
         if (!this.pool) return;
         const vol = Math.min(velocity / 15, 0.6);
         this.pool.play('CLACK', { volume: vol });
-    }
-
-    /**
-     * WHAT: Table "Thud" (Die-on-Table).
-     */
-    playThud(velocity = 10) {
-        if (!this.pool) return;
-        const vol = Math.min(velocity / 20, 0.8);
-        this.pool.play('THUD', { volume: vol });
     }
 
     /**
