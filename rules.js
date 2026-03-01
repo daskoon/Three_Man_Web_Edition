@@ -13,11 +13,12 @@ export function evaluateRules(v1, v2, players, turnIdx, threeManIdx, isVirgin) {
     let newThreeManIdx = threeManIdx;
     let threeManPenalty = false;
     let isDoubles = v1 === v2;
+    const isTitleChange = (v1 === 1 && v2 === 2) || (v1 === 2 && v2 === 1);
 
     // --- COMMANDMENT 1: THE THREE MAN (CURSE) ---
     // WHAT: Every 3 that appears (Face OR Sum), the 3-Man drinks.
     // WHY: This is the core "Hot Potato" mechanic of the game.
-    if (threeManIdx !== -1) {
+    if (threeManIdx !== -1 && !isTitleChange) {
         let p = 0;
         if (v1 === 3) p++;
         if (v2 === 3) p++;
@@ -32,7 +33,7 @@ export function evaluateRules(v1, v2, players, turnIdx, threeManIdx, isVirgin) {
 
     // --- COMMANDMENT 2: THE TITLE CHANGE (HOT POTATO) ---
     // WHAT: Rolling a 1 and a 2 makes YOU the new Three-Man.
-    if ((v1 === 1 && v2 === 2) || (v1 === 2 && v2 === 1)) {
+    if (isTitleChange) {
         newThreeManIdx = turnIdx;
         events.push("NEW THREE MAN!");
     }

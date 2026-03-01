@@ -506,8 +506,13 @@ function resolveRoll() {
         if (challengeType === 'SINGLE') {
             const res = won ? `${players[turnIdx]} WON! ${players[originalRollerIdx]} DRINKS` : `${players[turnIdx]} FAILED! ${players[turnIdx]} DRINKS`;
             UI.setStatus(res.replace('!', '!\n')); log(`!!! CHALLENGE: ${res}`);
+            
             turnIdx = originalRollerIdx; originalRollerIdx = -1; challengeType = null;
-            safeSetTimeout(() => { gameState = 'READY'; UI.setStatus("ROLL AGAIN"); }, 5000);
+            if (won) {
+                safeSetTimeout(nextTurn, 5000); // Original roller loses turn
+            } else {
+                safeSetTimeout(() => { gameState = 'READY'; UI.setStatus("ROLL AGAIN"); }, 5000); // Original roller keeps going
+            }
         } else {
             if (diceRolledCount === 0) {
                 diceRolledCount = 1; turnIdx = challengers[1]; gameState = 'CHALLENGE_READY';
@@ -516,8 +521,13 @@ function resolveRoll() {
             } else {
                 const res = won ? `MATCH! ${players[originalRollerIdx]} DRINKS TWICE!` : `NO MATCH! ${players[challengers[0]]} & ${players[challengers[1]]} DRINK`;
                 UI.setStatus(res.replace('!', '!\n')); log(`!!! SPLIT CHALLENGE: ${res}`);
+                
                 turnIdx = originalRollerIdx; originalRollerIdx = -1; challengeType = null; diceRolledCount = 0;
-                safeSetTimeout(() => { gameState = 'READY'; UI.setStatus("ROLL AGAIN"); }, 5000);
+                if (won) {
+                    safeSetTimeout(nextTurn, 5000); // Original roller loses turn
+                } else {
+                    safeSetTimeout(() => { gameState = 'READY'; UI.setStatus("ROLL AGAIN"); }, 5000); // Original roller keeps going
+                }
             }
         }
     } else {
