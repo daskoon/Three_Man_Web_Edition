@@ -290,12 +290,12 @@ document.getElementById('start-game-btn').onclick = () => {
  */
 document.getElementById('quick-play-btn').onclick = () => {
     players = [
-        "The Skoon", "Kate", "Rich Morehead", "Big Gay Rob", "Blaze", 
+        "The Skoon", "Kate", "Rich Morehead", "Blaze", 
         "Jesskanka", "Crusty", "Spacepants", "Kim Sexy", "Ashley", 
         "Lucifer", "Jess", "Lauren", "Joey Bars", "Egz", "BM", 
         "Black Larry", "Shadow"
     ];
-    log("[System] Quick Launch initiated with the full Delco Founding Roster.");
+    log("[System] Quick Launch initiated with the full Delco Founding Roster (respectfully excluding Rob).");
     GameStats.init(players);
     setupPlayerPresences();
     UI.setup.classList.add('hidden');
