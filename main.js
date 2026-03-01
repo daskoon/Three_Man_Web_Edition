@@ -12,6 +12,8 @@
 
 import * as THREE from 'three';
 import * as CANNON from 'cannon-es';
+import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader';
+import * as SkeletonUtils from 'three/addons/utils/SkeletonUtils.js';
 import { DirectorAudio } from './modules/audio.js';
 import { HapticManager } from './modules/haptics.js';
 import { GameStats } from './modules/stats.js';
@@ -180,32 +182,46 @@ function initializeGameObjects(diceMaterial) {
 
 /**
  * WHAT: Player Avatar Setup.
- * WHY: Creates floating spheres and labels to represent players in 3D space.
- * HOW: Iterates through the player array, calculating a radial position using `sin` and `cos` based on `(index / length) * 2PI`. Generates a `THREE.SphereGeometry` at each coordinate and injects a DOM element into the `ui-container` for the floating name label.
+ * WHY: Replaces generic spheres with high-fidelity animated Meshy 3D models.
+ * HOW: 1. Uses `GLTFLoader` to pre-fetch the base biped model. 2. For each player, clones the model and sets up an `AnimationMixer`. 3. Positions models in a radial circle around the table. 4. Updates player labels to float above the new character heads.
  */
-function setupPlayerPresences() {
+async function setupPlayerPresences() {
     playerMeshes.forEach(p => {
         scene.remove(p.mesh);
         if(p.labelEl) p.labelEl.remove();
     });
     playerMeshes = [];
+    
+    const loader = new GLTFLoader();
     const radius = 10.0;
     const container = document.getElementById('ui-container');
 
+    // WHAT: Base Model Loading.
+    // WHY: To ensure we have the asset once before cloning.
+    const gltf = await loader.loadAsync('assets/models/Meshy_AI_biped/Meshy_AI_Animation_Alert_withSkin.glb');
+
     players.forEach((name, i) => {
         const angle = (i / players.length) * Math.PI * 2;
-        const head = new THREE.Mesh(
-            new THREE.SphereGeometry(0.8, 32, 32),
-            new THREE.MeshStandardMaterial({ color: 0xdddddd, metalness: 0.3, roughness: 0.5 })
-        );
-        head.position.set(Math.sin(angle) * radius, tableHeight + 1.5, Math.cos(angle) * radius);
-        scene.add(head);
+        
+        // WHAT: Object Cloning.
+        // WHY: Efficient memory use for 18+ identical models.
+        const model = SkeletonUtils.clone(gltf.scene);
+        model.scale.set(3, 3, 3);
+        model.position.set(Math.sin(angle) * radius, 0, Math.cos(angle) * radius);
+        model.lookAt(0, 0, 0); // Face the table
+        scene.add(model);
+
+        // WHAT: Animation System.
+        // WHY: To bring the characters to life.
+        const mixer = new THREE.AnimationMixer(model);
+        const action = mixer.clipAction(gltf.animations[0]);
+        action.play();
 
         const label = document.createElement('div');
         label.className = 'floating-label hidden';
         label.innerHTML = `<strong>${name.toUpperCase()}</strong><br><span class="role-text"></span>`;
         container.appendChild(label);
-        playerMeshes.push({ mesh: head, angle: angle, name: name, labelEl: label });
+        playerMeshes.push({ mesh: model, mixer: mixer, angle: angle, name: name, labelEl: label });
     });
 }
 
@@ -219,23 +235,26 @@ const updateHUD = () => {
     playerMeshes.forEach((p, i) => {
         let isHighlighted = false;
         let roleStr = "";
-        let hexColor = 0x666666;
-
+        
         const isCurrent = (i === turnIdx);
         const isLeft = (i === (turnIdx - 1 + players.length) % players.length);
         const isRight = (i === (turnIdx + 1) % players.length);
 
         if (isCurrent) {
-            isHighlighted = true; hexColor = 0xffd700; roleStr = "(YOU)";
+            isHighlighted = true; roleStr = "(YOU)";
         } else if (isLeft) {
             roleStr = "LEFT";
         } else if (isRight) {
             roleStr = "RIGHT";
         }
         
-        p.mesh.material.emissive.setHex(hexColor);
-        p.mesh.material.emissiveIntensity = isHighlighted ? 0.8 : 0.2;
-        if (p.labelEl) p.labelEl.querySelector('.role-text').innerText = roleStr;
+        // WHAT: Visual Feedback.
+        // WHY: Since complex models don't use simple emissive on the group, we highlight the label.
+        if (p.labelEl) {
+            p.labelEl.querySelector('.role-text').innerText = roleStr;
+            p.labelEl.style.borderColor = isHighlighted ? 'var(--gold)' : '#444';
+            p.labelEl.style.boxShadow = isHighlighted ? '0 0 10px var(--gold-glow)' : 'none';
+        }
     });
 };
 
@@ -561,6 +580,7 @@ function animate() {
         }
 
         playerMeshes.forEach(p => {
+            if (p.mixer) p.mixer.update(dt);
             const vector = p.mesh.position.clone().project(camera);
             p.labelEl.style.left = `${(vector.x * 0.5 + 0.5) * window.innerWidth}px`;
             p.labelEl.style.top = `${(vector.y * -0.5 + 0.5) * window.innerHeight - 40}px`;
