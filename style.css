@@ -91,7 +91,8 @@ button:active { transform: scale(0.96); }
     font-size: 2rem; font-weight: 900;
     text-shadow: 0 10px 30px rgba(0,0,0,0.8);
     background: linear-gradient(90deg, transparent, rgba(0,0,0,0.6), transparent);
-    padding: 10px 50px;
+    padding: 20px 50px 10px; /* More padding at top */
+    text-align: center;
 }
 
 .player-entry {
@@ -121,16 +122,19 @@ button:active { transform: scale(0.96); }
 
 /* --- NEWS TICKER (CNN STYLE) --- */
 #ticker-wrap {
+    position: fixed;
+    bottom: 0; left: 0;
     width: 100%;
     background: #b22222; /* Casino Red */
-    border-bottom: 2px solid var(--gold);
+    border-top: 2px solid var(--gold);
     color: white;
     font-weight: 900;
     font-size: 0.8rem;
     overflow: hidden;
     white-space: nowrap;
-    padding: 4px 0;
-    box-shadow: 0 4px 10px rgba(0,0,0,0.5);
+    padding: 6px 0;
+    box-shadow: 0 -4px 10px rgba(0,0,0,0.5);
+    z-index: 100;
 }
 
 #ticker-content {
@@ -145,7 +149,7 @@ button:active { transform: scale(0.96); }
     0% { transform: translateX(0); }
     100% { transform: translateX(-100%); }
 }
-#bottom-hud { position: absolute; bottom: 10vh; width: 100%; text-align: center; pointer-events: none; }
+#bottom-hud { position: absolute; bottom: 50px; width: 100%; text-align: center; pointer-events: none; z-index: 100; }
 #current-3man { color: var(--gold); }
 
 /* --- 3D FLOATING LABELS --- */

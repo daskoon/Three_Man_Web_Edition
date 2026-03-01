@@ -52,7 +52,8 @@ export function updateCamera(camera, gameState, playerMeshes, turnIdx, dice, tab
     } else {
         // WHAT: Cinematic View Mapping.
         const pMesh = playerMeshes[turnIdx].mesh;
-        const camPos = new THREE.Vector3(pMesh.position.x * 2.2, tableHeight + 8, pMesh.position.z * 2.2);
+        // Keep radius < 20 so camera stays inside the walls
+        const camPos = new THREE.Vector3(pMesh.position.x * 1.5, tableHeight + 8, pMesh.position.z * 1.5);
         const midX = (dice[0].mesh.position.x + dice[1].mesh.position.x) / 2;
         const midZ = (dice[0].mesh.position.z + dice[1].mesh.position.z) / 2;
 
@@ -62,7 +63,8 @@ export function updateCamera(camera, gameState, playerMeshes, turnIdx, dice, tab
         } else if (gameState === 'ROLLING') {
             const distBetween = dice[0].mesh.position.distanceTo(dice[1].mesh.position);
             const dynamicHeight = Math.max(tableHeight + 12, distBetween * 1.5);
-            camera.position.lerp(new THREE.Vector3(midX * 0.5, dynamicHeight, 15 + midZ * 0.5), lerpFactor);
+            // Ensure rolling camera Z offset also stays in the room
+            camera.position.lerp(new THREE.Vector3(midX * 0.5, dynamicHeight, 10 + midZ * 0.5), lerpFactor);
             camera.lookAt(midX, tableHeight, midZ);
         } else {
             const distBetween = dice[0].mesh.position.distanceTo(dice[1].mesh.position);
