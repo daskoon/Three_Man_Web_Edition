@@ -386,7 +386,7 @@ function animate() {
         if (cup) {
             if (gameState === 'SHAKING') {
                 const pMesh = playerMeshes[turnIdx].mesh;
-                cup.visible = true;
+                cup.visible = false; // Forced hidden by Boss
                 cup.position.set(pMesh.position.x * 0.5, tableHeight + 4, pMesh.position.z * 0.5);
                 cup.rotation.x = Math.PI; // Upside down
             } else {
@@ -478,7 +478,7 @@ function animate() {
 
 function resolveRoll() {
     if (dice.length < 2) return;
-    gameState = 'RESULTS'; if (audio) audio.playThud();
+    gameState = 'RESULTS'; if (audio) audio.playFelt(10);
     HapticManager.thud();
     
     // Lock physics bodies to prevent jitter during scale-up

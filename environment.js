@@ -107,7 +107,7 @@ export function setupEnvironment(scene) {
         new THREE.MeshStandardMaterial({ color: 0x3d2b1f, roughness: 0.9, metalness: 0.1, side: THREE.DoubleSide })
     );
     cup.name = "diceCup";
-    cup.visible = false; // Hidden by default, only shown in SHAKING
+    cup.visible = false; // Hidden by Boss request
     scene.add(cup);
 
     // Lights
