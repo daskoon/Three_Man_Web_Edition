@@ -32,7 +32,8 @@ This document defines the specific terminology and spatial references used in th
 *   **The Dead Roll:** A roll that results in no drinking penalties or rule triggers. This ends the player's turn and passes the dice to the right.
 *   **Double Matching:** A condition in the Doubles Challenge where the challenger(s) roll a double, forcing the original roller to drink and lose their turn.
 
-## 6. The Lawmaker Commandments (Safety First)
-*   **Commandment 1: Rule Non-Interference.** Custom laws cannot overwrite or delete core rules (e.g., 3-Man, 7-Left).
-*   **Commandment 2: No Direct Targeting.** Laws must target roles (Roller, Neighbors, Everyone), never specific individuals by name.
-*   **Commandment 3: Sanity Cap.** Penalties are limited to 3 drinks. No "Hospital-level" rules allowed. We are here to have fun and get drunk, not die.
+## 6. Snake Eyes: Rule Maker Engine
+*   **Rule Maker Limits:** The mandatory safety constraints for custom rules.
+    1. **No Rule Interference.** Custom rules cannot overwrite or delete core rules (e.g., 3-Man, 7-Left).
+    2. **No Direct Targeting.** Laws must target roles (Roller, Neighbors, Everyone), never specific individuals by name.
+    3. **Sanity Cap.** Penalties are limited to 3 drinks. No "Hospital-level" rules allowed. We are here to have fun and get drunk, not die.

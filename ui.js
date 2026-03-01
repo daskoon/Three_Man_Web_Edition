@@ -136,7 +136,7 @@ export const UI = {
         `).join('') + `
             <tr>
                 <td colspan="2" style="background: rgba(255,215,0,0.1); padding: 15px; border-top: 2px solid var(--gold);">
-                    <h3 style="color:var(--gold); margin-top:0;">LAWMAKER COMMANDMENTS</h3>
+                    <h3 style="color:var(--gold); margin-top:0;">SNAKE EYES RULE LIMITS</h3>
                     <p style="font-size:0.7rem; color:#ccc; margin:0;">
                         1. No Rule Interference: Laws cannot overwrite core rules.<br>
                         2. No Direct Targeting: Laws must target roles, not names.<br>
