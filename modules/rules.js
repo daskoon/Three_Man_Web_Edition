@@ -75,17 +75,26 @@ export function evaluateRules(v1, v2, players, turnIdx, threeManIdx, isVirgin) {
 
     // --- CUSTOM LAWS (MODULAR DELEGATION) ---
     const hits = Laws.evaluate(v1, v2, total, isDoubles);
+    
+    /**
+     * WHAT: Target Name Resolver.
+     * WHY: To map role-based strings (Everyone, Left, etc.) to actual player names.
+     */
+    const getTargets = (targetKey) => {
+        const t = [];
+        if (targetKey === 'everyone') players.forEach(p => t.push(p));
+        else if (targetKey === 'roller') t.push(players[turnIdx]);
+        else if (targetKey === 'threeman' && threeManIdx !== -1) t.push(players[threeManIdx]);
+        else if (targetKey === 'left') t.push(players[(turnIdx - 1 + players.length) % players.length]);
+        else if (targetKey === 'right') t.push(players[(turnIdx + 1) % players.length]);
+        return t;
+    };
+
     hits.forEach(law => {
         triggeredLaws.push(law.label);
         events.push("CUSTOM LAW!");
         
-        const targetNames = [];
-        if (law.target === 'everyone') players.forEach(p => targetNames.push(p));
-        else if (law.target === 'roller') targetNames.push(players[turnIdx]);
-        else if (law.target === 'threeman' && threeManIdx !== -1) targetNames.push(players[threeManIdx]);
-        else if (law.target === 'left') targetNames.push(players[(turnIdx - 1 + players.length) % players.length]);
-        else if (law.target === 'right') targetNames.push(players[(turnIdx + 1) % players.length]);
-
+        const targetNames = getTargets(law.target);
         const drinkCount = Laws.resolvePenalty(law);
         targetNames.forEach(name => penalties.push({ name, count: drinkCount, reason: "CUSTOM LAW" }));
     });

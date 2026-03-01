@@ -388,7 +388,7 @@ function resolveRoll() {
         // HOW: Transforms the multi-line HUD status into a single-line marquee string.
         let tickerMsg = statusStr.replace(/\n/g, ' | ');
         if (penalties.length > 0) {
-            const totalDrinks = penalties.reduce((sum, p) => sum + p.count, 0);
+            const totalDrinks = penalties.reduce((sum, p) => sum + (p.count || 0), 0);
             tickerMsg += ` | LATEST CHAOS: ${totalDrinks} DRINKS DISTRIBUTED`;
         }
         const rivalry = GameStats.getRivalryReport();

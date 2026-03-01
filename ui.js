@@ -86,8 +86,8 @@ export const UI = {
         const rivalry = statsEngine.getRivalryReport();
         if (rivalry.length > 0) {
             const [key, count] = rivalry[0];
-            const [from, to] = key.split('->');
-            this.rivalryReport.innerHTML = `<strong>TOP RIVALRY:</strong><br>${from.toUpperCase()} has absolutely destroyed ${to.toUpperCase()} with ${count} drinks!`;
+            const [p1, p2] = key.split('<->');
+            this.rivalryReport.innerHTML = `<strong>TOP RIVALRY:</strong><br>${p1.toUpperCase()} and ${p2.toUpperCase()} are going at it (${count} drinks)!`;
         } else {
             this.rivalryReport.innerHTML = "<strong>TOP RIVALRY:</strong><br>No beef identified yet. Keep rolling.";
         }
@@ -100,6 +100,7 @@ export const UI = {
      * @param {function} callback - Called when law is enacted.
      */
     showLawmaker(callback) {
+        this.confirmLawBtn.onclick = null; // Clear any old junk
         this.lawmakerScreen.classList.remove('hidden');
         this.confirmLawBtn.onclick = () => {
             const trigger = this.lawTrigger.value;

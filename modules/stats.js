@@ -43,7 +43,8 @@ export const GameStats = {
 
             if (from !== to) {
                 // WHAT: Rivalry Key Generation.
-                const key = `${from}->${to}`;
+                // WHY: Aggregates beef in both directions (Skoon->Blaze and Blaze->Skoon).
+                const key = [from, to].sort().join('<->');
                 this.rivalries[key] = (this.rivalries[key] || 0) + count;
 
                 // WHAT: Streak Tracking (Offensive).
