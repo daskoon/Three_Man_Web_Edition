@@ -283,6 +283,22 @@ document.getElementById('start-game-btn').onclick = () => {
     UI.setStatus(`${players[turnIdx].toUpperCase()}\nSHAKE TO ROLL`);
 };
 
+/**
+ * WHAT: Quick Launch Handler.
+ * WHY: To bypass the manual setup phase for rapid testing or 'Jump In' play.
+ * HOW: Manually populates the `players` array with original founding members. Triggers the same logic as the standard Start button.
+ */
+document.getElementById('quick-play-btn').onclick = () => {
+    players = ["Tim", "Face", "Skoon", "Kate", "Rich"];
+    log("[System] Quick Launch initiated with Founding Players.");
+    GameStats.init(players);
+    setupPlayerPresences();
+    UI.setup.classList.add('hidden');
+    gameState = 'READY';
+    updateHUD();
+    UI.setStatus(`${players[turnIdx].toUpperCase()}\nSHAKE TO ROLL`);
+};
+
 document.getElementById('add-player-btn').onclick = () => {
     const name = UI.playerInput.value.trim();
     if (name && !players.includes(name)) {
