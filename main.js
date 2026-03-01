@@ -1,50 +1,60 @@
 /**
  * @file main.js
  * @description Modularized "Director's Cut" Orchestrator.
+ * 
+ * WHO: Principal Architect (Agent) & The Boss (Skoon).
+ * WHAT: The brain of the application. Manages the state machine, physics loop, and systems integration.
+ * WHY: To provide a high-fidelity, polished WebGL experience for Three Man.
+ * HOW: Orchestrates Cannon-es physics, Three.js rendering, and custom rule/UI modules.
+ * WHEN: Continuous execution via requestAnimationFrame.
+ * WHERE: Root orchestrator for the web application.
  */
 
 import * as THREE from 'three';
 import * as CANNON from 'cannon-es';
 import { DirectorAudio } from './audio.js';
 import { HapticManager } from './haptics.js';
+import { GameStats } from './stats.js';
 import { createDieTexture, getFace } from './dice.js';
 import { setupPhysics, createDieBody } from './physics.js';
+import { setupEnvironment, tableHeight } from './environment.js';
+import { updateCamera, setFreeCam, isFreeCam, handleResize } from './camera.js';
 import { evaluateRules } from './rules.js';
 import { UI } from './ui.js';
 import { log, initLogButton } from './logger.js';
-import { setupEnvironment, tableHeight } from './environment.js';
-import { updateCamera, handleResize, isFreeCam, setFreeCam } from './camera.js';
 
-// --- GAME STATE ---
+// --- STATE MACHINE ---
 let players = [];
-let playerMeshes = [];
 let turnIdx = 0;
 let threeManIdx = -1;
 let isVirgin = true;
-let audio;
-let settleTimer = 0; // Changed from settleCounter to timer (seconds)
-let rollStartTime = 0; // For hard fallback
+let gameState = 'SPLASH'; // States: SPLASH, SETUP, READY, SHAKING, ROLLING, RESULTS, DECIDING, CHALLENGE_READY, PASSING
+let settleTimer = 0;
+let rollStartTime = 0;
 let accelMag = 0;
 let gameTimer = null;
-const clock = new THREE.Clock();
-const fixedTimeStep = 1 / 120;
-
-let challengeType = null;
+let challengeType = null; // 'SINGLE' or 'SPLIT'
 let originalRollerIdx = -1;
 let challengers = [];
 let diceRolledCount = 0;
-let gameState = 'SPLASH';
+let playerMeshes = [];
 
-// Input State
-const keys = {};
-let isLeftDown = false;
-let isRightDown = false;
-let movement = { x: 0, y: 0 };
+const lerpFactor = 0.1;
+let audio;
 
+// --- UTILS ---
+/**
+ * WHAT: Vibration Bridge.
+ * WHY: Simple wrapper for the HapticManager.
+ */
 const vibrate = (pattern) => {
     HapticManager.vibrate(pattern);
 };
 
+/**
+ * WHAT: Timed Action Wrapper.
+ * WHY: To ensure only one game timer is active at a time.
+ */
 const safeSetTimeout = (fn, delay) => {
     clearTimeout(gameTimer);
     gameTimer = setTimeout(fn, delay);
@@ -75,9 +85,8 @@ try {
 try {
     const phys = setupPhysics();
     world = phys.world;
-    const diceMaterial = phys.diceMaterial;
     setupEnvironment(scene);
-    initLogButton('download-logs-btn');
+    initLogButton(() => {}); // Empty callback for now
     log("[System] Physics and Environment setup complete.");
 } catch (e) {
     log(`[CRITICAL] Setup failed: ${e.message}`);
@@ -92,6 +101,11 @@ window.onerror = (msg, url, line) => {
 let dieMaterials = [];
 let dice = [];
 
+/**
+ * WHAT: Game Object Construction.
+ * WHY: Creates the physical and visual dice.
+ * HOW: Maps procedural textures to BoxGeometries and Cannon bodies.
+ */
 function initializeGameObjects(diceMaterial) {
     try {
         if (!renderer || !world) return;
@@ -116,18 +130,14 @@ function initializeGameObjects(diceMaterial) {
 
             // COLLISION LISTENER (Premium Audio/Haptics)
             const onCollide = (e) => {
-                // IMPORTANT: Strictly prevent audio during transition or results
                 if (gameState !== 'ROLLING' && gameState !== 'SHAKING') return;
                 if (d.body.sleepState === CANNON.Body.SLEEPING) return;
 
                 const velocity = e.contact.getImpactVelocityAlongNormal();
-                if (velocity < 0.8) return; // Increased threshold to ignore micro-settling
+                if (velocity < 0.8) return; 
 
-                // Distinguish collision types
                 const otherBody = e.body;
                 const isDieOnDie = dice.some(other => other.body === otherBody);
-
-                // Identify Rails (Wood) vs Floor (Felt)
                 const isFloor = otherBody.position.y === 4.0;
                 const isRail = !isDieOnDie && !isFloor;
 
@@ -143,19 +153,21 @@ function initializeGameObjects(diceMaterial) {
                 }
             };
 
-            // Clean up old listener if it exists
             if (d.body._lastListener) d.body.removeEventListener('collide', d.body._lastListener);
             d.body.addEventListener('collide', onCollide);
             d.body._lastListener = onCollide;
         });
         
-        log("[System] Dice and Materials initialized with Collision Listeners.");
+        log("[System] Dice and Materials initialized.");
     } catch (e) {
         log(`[CRITICAL] GameObject initialization failed: ${e.message}`);
     }
 }
-// Initial call removed - moving into init-btn for safety
 
+/**
+ * WHAT: Player Avatar Setup.
+ * WHY: Creates floating spheres and labels to represent players in 3D space.
+ */
 function setupPlayerPresences() {
     playerMeshes.forEach(p => {
         scene.remove(p.mesh);
@@ -182,6 +194,10 @@ function setupPlayerPresences() {
     });
 }
 
+/**
+ * WHAT: HUD Synchronization.
+ * WHY: Highlights the current roller and neighbors in the 3D scene.
+ */
 const updateHUD = () => {
     UI.updateHUD(players[turnIdx], threeManIdx === -1 ? null : players[threeManIdx]);
     playerMeshes.forEach((p, i) => {
@@ -189,358 +205,165 @@ const updateHUD = () => {
         let roleStr = "";
         let hexColor = 0x666666;
 
-        if (gameState === 'CHALLENGE_READY' && challengeType === 'SPLIT') {
-            if (challengers.includes(i)) {
-                isHighlighted = true;
-                hexColor = 0xffd700;
-                roleStr = "(CHALLENGER)";
-            }
-        } else {
-            const isCurrent = (i === turnIdx);
-            const isLeft = (i === (turnIdx - 1 + players.length) % players.length);
-            const isRight = (i === (turnIdx + 1) % players.length);
+        const isCurrent = (i === turnIdx);
+        const isLeft = (i === (turnIdx - 1 + players.length) % players.length);
+        const isRight = (i === (turnIdx + 1) % players.length);
 
-            if (isCurrent) {
-                isHighlighted = true;
-                hexColor = 0xffd700;
-                roleStr = "(YOU)";
-            } else if (isLeft) {
-                roleStr = "LEFT (Drinks on 7)";
-            } else if (isRight) {
-                roleStr = "RIGHT (Drinks on 11)";
-            }
+        if (isCurrent) {
+            isHighlighted = true; hexColor = 0xffd700; roleStr = "(YOU)";
+        } else if (isLeft) {
+            roleStr = "LEFT";
+        } else if (isRight) {
+            roleStr = "RIGHT";
         }
+        
         p.mesh.material.emissive.setHex(hexColor);
         p.mesh.material.emissiveIntensity = isHighlighted ? 0.8 : 0.2;
         if (p.labelEl) p.labelEl.querySelector('.role-text').innerText = roleStr;
     });
 };
 
+/**
+ * WHAT: Turn Progression (Right-Hand Rotation).
+ * WHY: Dead rolls or lost challenges pass the dice to the right.
+ * HOW: Increments the turn index and triggers the 'Pass the Phone' flow.
+ */
 const nextTurn = () => {
     turnIdx = (turnIdx + 1) % players.length;
     isVirgin = true; originalRollerIdx = -1; challengers = []; diceRolledCount = 0;
-    gameState = 'READY';
-    updateHUD();
-    UI.setStatus(`${players[turnIdx].toUpperCase()}\nSHAKE TO ROLL`);
-    UI.setShame(false);
+    
+    gameState = 'PASSING';
+    UI.showPassPhone(players[turnIdx], () => {
+        gameState = 'READY';
+        updateHUD();
+        UI.setStatus(`${players[turnIdx].toUpperCase()}\nSHAKE TO ROLL`);
+        UI.setShame(false);
+    });
 };
 
+// --- BUTTONS ---
 document.getElementById('init-btn').onclick = async (e) => {
-    const btn = e.target;
-    const originalText = btn.innerText;
-    btn.innerText = "LOADING...";
-    btn.disabled = true;
-    log("[System] PLAY button clicked. Initializing...");
-    
+    const btn = e.target; btn.innerText = "LOADING..."; btn.disabled = true;
     try {
         if (typeof DeviceMotionEvent !== 'undefined' && typeof DeviceMotionEvent.requestPermission === 'function') {
-            log("[System] Requesting motion permissions...");
             await DeviceMotionEvent.requestPermission();
         }
-    } catch (err) {
-        log(`[Warning] Motion permission error: ${err.message}`);
-    }
+    } catch (err) { log(`[Warning] Motion permission error: ${err.message}`); }
 
     try {
-        log("[System] Initializing audio...");
-        audio = new DirectorAudio();
-        await audio.resume();
-    } catch (err) {
-        log(`[Warning] Audio initialization failed: ${err.message}`);
-    }
+        audio = new DirectorAudio(); await audio.resume();
+    } catch (err) { log(`[Warning] Audio failed: ${err.message}`); }
 
-    // Ensure objects are initialized before moving to SETUP
     const phys = setupPhysics();
     initializeGameObjects(phys.diceMaterial);
-    
-    if (dice.length < 2) {
-        log("[CRITICAL] Game objects failed to initialize.");
-        btn.innerText = "ERROR - RETRY?";
-        btn.disabled = false;
-        return;
-    }
     
     UI.splash.classList.add('hidden');
     UI.setup.classList.remove('hidden');
     gameState = 'SETUP';
-    log("[System] Transitioned to SETUP state.");
+};
+
+document.getElementById('start-game-btn').onclick = () => {
+    if (players.length < 2) { alert("Need at least 2 players!"); return; }
+    GameStats.init(players);
+    setupPlayerPresences();
+    UI.setup.classList.add('hidden');
+    gameState = 'READY';
+    updateHUD();
+    UI.setStatus(`${players[turnIdx].toUpperCase()}\nSHAKE TO ROLL`);
 };
 
 document.getElementById('add-player-btn').onclick = () => {
-    if (players.length >= 8) return alert("Max 8 players!");
-    const val = UI.playerInput.value.trim();
-    if (val) { players.push(val); UI.renderPlayers(players, window.removePlayer); UI.playerInput.value = ''; }
+    const name = UI.playerInput.value.trim();
+    if (name && !players.includes(name)) {
+        players.push(name);
+        UI.playerInput.value = "";
+        UI.renderPlayers(players, (idx) => { players.splice(idx, 1); UI.renderPlayers(players, (idx)=>{}); });
+    }
 };
 
-window.removePlayer = (idx) => { players.splice(idx, 1); UI.renderPlayers(players, window.removePlayer); };
-
-const startGame = () => {
-    UI.setup.classList.add('hidden');
-    setupPlayerPresences();
-    turnIdx = players.length - 1;
-    nextTurn();
-};
-
-document.getElementById('start-game-btn').onclick = () => { if (players.length < 2) return alert("Need 2+ players"); startGame(); };
-
-document.getElementById('quick-play-btn').onclick = () => {
-    players = ["SKOON", "FACE", "RICH", "BLAZE", "ROB"].sort(() => Math.random() - 0.5);
-    startGame();
-};
-
+/**
+ * WHAT: The "Toss" Mechanic.
+ * WHY: Applies physics impulses to simulate a manual dice throw.
+ */
 function throwDice() {
     if (gameState !== 'SHAKING') return;
-    if (dice.length < 2) {
-        log("[Error] Cannot throw dice: Dice not initialized!");
-        gameState = 'READY';
-        return;
-    }
+    if (dice.length < 2) return;
+    
     log(`>>> ${players[turnIdx].toUpperCase()} ROLLS FROM POV >>>`);
-    gameState = 'ROLLING'; 
-    settleTimer = 0; 
-    rollStartTime = performance.now(); // Start tracking roll duration
+    gameState = 'ROLLING'; settleTimer = 0; rollStartTime = performance.now();
     UI.setStatus("THROW!");
 
     dice.forEach((d, i) => {
         if (challengeType === 'SPLIT' && i !== diceRolledCount) { d.body.type = CANNON.Body.STATIC; return; }
         const pMesh = playerMeshes[turnIdx].mesh;
-        // Start position slightly in front of the player
         d.body.position.set(pMesh.position.x * 0.5, tableHeight + 4, pMesh.position.z * 0.5);
         d.body.quaternion.set(Math.random(), Math.random(), Math.random(), Math.random()).normalize();
         d.body.type = CANNON.Body.DYNAMIC; d.body.mass = 1.0; d.body.updateMassProperties(); d.body.wakeUp();
         
-        // WHAT: Impulse calculation for "Forward Momentum".
-        // WHY: Adding random spread and stronger inward force to simulate a "toss" towards the center.
-        const spreadX = (Math.random() - 0.5) * 2;
-        const spreadZ = (Math.random() - 0.5) * 2;
-        const force = new CANNON.Vec3(
-            -pMesh.position.x * 1.5 + spreadX, 
-            -15, 
-            -pMesh.position.z * 1.5 + spreadZ
-        );
+        const spread = (Math.random() - 0.5) * 2;
+        const force = new CANNON.Vec3(-pMesh.position.x * 1.5 + spread, -15, -pMesh.position.z * 1.5 + spread);
         d.body.applyImpulse(force, new CANNON.Vec3(0, 0, 0));
         d.body.angularVelocity.set(Math.random()*60-30, Math.random()*60-30, Math.random()*60-30);
     });
     vibrate(150);
 }
 
-// Input Listeners
-window.addEventListener('devicemotion', (e) => {
-    if (gameState !== 'READY' && gameState !== 'SHAKING' && gameState !== 'CHALLENGE_READY') return;
-    const a = e.accelerationIncludingGravity; if (!a) return;
-    const currentMag = Math.sqrt(a.x**2 + a.y**2 + a.z**2);
-    accelMag = accelMag * 0.7 + currentMag * 0.3;
-    if (accelMag > 22) {
-        if (gameState === 'READY' || gameState === 'CHALLENGE_READY') { gameState = 'SHAKING'; vibrate([20, 20, 20, 20, 20]); }
-    } else if (gameState === 'SHAKING' && accelMag < 15) { throwDice(); }
-});
-
-window.onmousedown = (e) => {
-    if ((gameState === 'READY' || gameState === 'CHALLENGE_READY') && e.target.tagName !== 'BUTTON') {
-        gameState = 'SHAKING'; setTimeout(throwDice, 800);
-    }
-    if (e.button === 0) isLeftDown = true;
-    if (e.button === 2) isRightDown = true;
-};
-
-window.onmouseup = (e) => {
-    if (e.button === 0) isLeftDown = false;
-    if (e.button === 2) isRightDown = false;
-};
-
-window.addEventListener('keydown', (e) => { keys[e.code] = true; });
-window.addEventListener('keyup', (e) => { keys[e.code] = false; });
-window.addEventListener('mousemove', (e) => { movement.x = e.movementX; movement.y = e.movementY; });
-window.addEventListener('contextmenu', (e) => { if (isFreeCam) e.preventDefault(); });
-window.addEventListener('wheel', (e) => {
-    if (!isFreeCam) return;
-    const forward = new THREE.Vector3(0, 0, -1).applyQuaternion(camera.quaternion);
-    camera.position.addScaledVector(forward, -e.deltaY * 0.01);
-});
-
-document.getElementById('freecam-btn').onclick = (e) => {
-    setFreeCam(!isFreeCam);
-    e.target.innerText = `FREE CAM: ${isFreeCam ? 'ON' : 'OFF'}`;
-    e.target.style.background = isFreeCam ? 'var(--gold)' : 'rgba(0,0,0,0.5)';
-    e.target.style.color = isFreeCam ? 'black' : 'white';
-};
-
-document.getElementById('guide-btn').onclick = () => UI.showGuide(true);
-document.getElementById('close-guide-btn').onclick = () => UI.showGuide(false);
-
-let frameCount = 0;
-function animate() {
-    requestAnimationFrame(animate);
-    const dt = clock.getDelta();
-    const lerpFactor = 1.0 - Math.pow(0.01, dt);
-
-    if (gameState !== 'SPLASH' && gameState !== 'SETUP') {
-        if (!isFreeCam) {
-            world.step(fixedTimeStep, dt, 20);
-        }
-
-        updateCamera(camera, gameState, playerMeshes, turnIdx, dice, tableHeight, lerpFactor, isLeftDown, isRightDown, movement, keys, dt);
-
-        if (!dice[0] || !dice[1] || !playerMeshes[turnIdx]) return;
-
-        // Physics Logs
-        if (gameState === 'ROLLING' && !isFreeCam) {
-            dice.forEach((d, i) => {
-                const vel = d.body.velocity.length();
-                if (frameCount % 4 === 0) log(` [Physics] Die ${i}: ${vel.toFixed(2)} Vec3`);
-            });
-            frameCount++;
-        }
-
-        const cup = scene.getObjectByName("diceCup");
-        if (cup) {
-            if (gameState === 'SHAKING') {
-                const pMesh = playerMeshes[turnIdx].mesh;
-                cup.visible = false; // Forced hidden by Boss
-                cup.position.set(pMesh.position.x * 0.5, tableHeight + 4, pMesh.position.z * 0.5);
-                cup.rotation.x = Math.PI; // Upside down
-            } else {
-                cup.visible = false;
-            }
-        }
-
-        dice.forEach((d, i) => {
-            if (gameState === 'READY' || (gameState === 'CHALLENGE_READY' && challengeType === 'SPLIT' && i >= diceRolledCount)) {
-                const pMesh = playerMeshes[turnIdx].mesh;
-                const angle = playerMeshes[turnIdx].angle;
-                const offsetX = Math.cos(angle) * (i === 0 ? -0.8 : 0.8);
-                const offsetZ = -Math.sin(angle) * (i === 0 ? -0.8 : 0.8);
-                const hoverPos = new THREE.Vector3(pMesh.position.x * 0.5 + offsetX, tableHeight + 4, pMesh.position.z * 0.5 + offsetZ);
-
-                if (!isFreeCam) {
-                    d.mesh.position.lerp(hoverPos, lerpFactor);
-                    d.mesh.scale.lerp(new THREE.Vector3(4, 4, 4), lerpFactor);
-                    d.mesh.rotation.y += 0.01;
-                    d.body.position.set(d.mesh.position.x, d.mesh.position.y, d.mesh.position.z);
-                    d.body.type = CANNON.Body.STATIC;
-                }
-                        } else if (gameState === 'SHAKING') {
-                            const pMesh = playerMeshes[turnIdx].mesh;
-                            // Trap dice inside cup
-                            if (!isFreeCam) {
-                                if (d.body.type !== CANNON.Body.DYNAMIC) {
-                                    d.body.type = CANNON.Body.DYNAMIC;
-                                    d.body.mass = 1.0;
-                                    d.body.updateMassProperties();
-                                }
-            
-                                                    // Jitter dice inside cup to cause collisions/clacks
-                                                    const jitterAmount = 0.5;
-                                                    d.body.position.x = pMesh.position.x * 0.5 + (Math.random()-0.5) * jitterAmount;
-                                                    d.body.position.z = pMesh.position.z * 0.5 + (Math.random()-0.5) * jitterAmount;
-                                                    d.body.position.y = tableHeight + 4 + (Math.random()-0.5) * jitterAmount;
-                    
-                    d.mesh.position.copy(d.body.position);
-                    d.mesh.quaternion.copy(d.body.quaternion);
-                    // Shrink visually while in cup
-                    d.mesh.scale.lerp(new THREE.Vector3(1, 1, 1), lerpFactor);
-                }
-            } else {
-                if (!isFreeCam) {
-                    d.mesh.position.copy(d.body.position); d.mesh.quaternion.copy(d.body.quaternion);
-                    if (gameState === 'RESULTS') d.mesh.scale.lerp(new THREE.Vector3(4, 4, 4), lerpFactor);
-                    else d.mesh.scale.lerp(new THREE.Vector3(1, 1, 1), lerpFactor);
-                    const visualOffset = 0.095 * (d.mesh.scale.x - 1);
-                    d.mesh.position.y += visualOffset;
-                }
-            }
-        });
-
-        if (gameState === 'ROLLING' && !isFreeCam) {
-            const isStopped = dice.every(d => 
-                d.body.velocity.length() < 0.1 && 
-                d.body.angularVelocity.length() < 0.2
-            );
-
-            if (isStopped) {
-                settleTimer += dt;
-                if (settleTimer > 0.8) { // Require 0.8s of total stability
-                    log("[System] Dice settled naturally.");
-                    resolveRoll();
-                }
-            } else {
-                settleTimer = 0;
-            }
-
-            // Hard Fallback: Force resolution after 8 seconds
-            if (performance.now() - rollStartTime > 8000) {
-                log("[Warning] Roll duration exceeded 8s. Forcing resolution...");
-                resolveRoll();
-            }
-
-            if (originalRollerIdx === -1) {
-                if (dice.some(d => d.body.type === CANNON.Body.DYNAMIC && Math.sqrt(d.body.position.x**2 + d.body.position.z**2) > 7.0)) triggerSloppy();
-            }
-        }
-
-        playerMeshes.forEach(p => {
-            const vector = p.mesh.position.clone().project(camera);
-            p.labelEl.style.left = `${(vector.x * 0.5 + 0.5) * window.innerWidth}px`;
-            p.labelEl.style.top = `${(vector.y * -0.5 + 0.5) * window.innerHeight - 40}px`;
-            p.labelEl.classList.remove('hidden');
-        });
-    }
-    renderer.render(scene, camera);
-}
-
+/**
+ * WHAT: Roll Resolver.
+ * WHY: Evaluates the outcome, updates stats, and manages turn progression.
+ */
 function resolveRoll() {
     if (dice.length < 2) return;
     
-    // Lock physics bodies immediately to stop all collision events
     dice.forEach(d => {
-        d.body.velocity.set(0, 0, 0);
-        d.body.angularVelocity.set(0, 0, 0);
-        d.body.type = CANNON.Body.STATIC;
-        d.body.updateMassProperties();
+        d.body.velocity.set(0, 0, 0); d.body.angularVelocity.set(0, 0, 0);
+        d.body.type = CANNON.Body.STATIC; d.body.updateMassProperties();
     });
 
-    gameState = 'RESULTS'; 
-    if (audio) audio.playFelt(15); // Solid final thud
-    HapticManager.thud();
-
+    gameState = 'RESULTS'; if (audio) audio.playFelt(15); HapticManager.thud();
     const v1 = getFace(dice[0].mesh); const v2 = getFace(dice[1].mesh);
 
     if (originalRollerIdx !== -1) {
         const won = (v1 === v2);
         if (challengeType === 'SINGLE') {
             const res = won ? `${players[turnIdx]} WON! ${players[originalRollerIdx]} DRINKS` : `${players[turnIdx]} FAILED! ${players[turnIdx]} DRINKS`;
-            UI.setStatus(res.replace('!', '!\n')); log(`!!! CHALLENGE: ${res}`);
+            UI.setStatus(`${res}\n${UI.getTrashTalk(won ? 'win' : 'fail')}`);
             
+            // STATS: Record challenge results
+            if (won) GameStats.record(players[turnIdx], players[originalRollerIdx], 1);
+            else GameStats.record(players[originalRollerIdx], players[turnIdx], 1);
+
             turnIdx = originalRollerIdx; originalRollerIdx = -1; challengeType = null;
-            if (won) {
-                safeSetTimeout(nextTurn, 5000); // Original roller loses turn
-            } else {
-                safeSetTimeout(() => { gameState = 'READY'; UI.setStatus("ROLL AGAIN"); }, 5000); // Original roller keeps going
-            }
+            if (won) safeSetTimeout(nextTurn, 5000);
+            else safeSetTimeout(() => { gameState = 'READY'; UI.setStatus("ROLL AGAIN"); }, 5000);
         } else {
             if (diceRolledCount === 0) {
                 diceRolledCount = 1; turnIdx = challengers[1]; gameState = 'CHALLENGE_READY';
                 UI.setStatus(`${players[turnIdx].toUpperCase()}\nROLL DIE 2`);
-                log(`>>> SPLIT CHALLENGE: Die 1 is ${v1}. Waiting for ${players[turnIdx]}...`);
             } else {
                 const res = won ? `MATCH! ${players[originalRollerIdx]} DRINKS TWICE!` : `NO MATCH! ${players[challengers[0]]} & ${players[challengers[1]]} DRINK`;
-                UI.setStatus(res.replace('!', '!\n')); log(`!!! SPLIT CHALLENGE: ${res}`);
+                UI.setStatus(`${res}\n${UI.getTrashTalk(won ? 'win' : 'fail')}`);
                 
+                // STATS: Record split challenge
+                if (won) GameStats.record(players[turnIdx], players[originalRollerIdx], 2);
+                else { GameStats.record(players[originalRollerIdx], players[challengers[0]], 1); GameStats.record(players[originalRollerIdx], players[challengers[1]], 1); }
+
                 turnIdx = originalRollerIdx; originalRollerIdx = -1; challengeType = null; diceRolledCount = 0;
-                if (won) {
-                    safeSetTimeout(nextTurn, 5000); // Original roller loses turn
-                } else {
-                    safeSetTimeout(() => { gameState = 'READY'; UI.setStatus("ROLL AGAIN"); }, 5000); // Original roller keeps going
-                }
+                if (won) safeSetTimeout(nextTurn, 5000);
+                else safeSetTimeout(() => { gameState = 'READY'; UI.setStatus("ROLL AGAIN"); }, 5000);
             }
         }
     } else {
-        const { events, newThreeManIdx, threeManPenalty, isDoubles } = evaluateRules(v1, v2, players, turnIdx, threeManIdx, isVirgin);
+        const { events, newThreeManIdx, threeManPenalty, isDoubles, penalties } = evaluateRules(v1, v2, players, turnIdx, threeManIdx, isVirgin);
         if (threeManPenalty) UI.setShame(true);
         if (audio && events.some(e => e.includes("SOCIAL"))) audio.playSocial();
+        
+        // STATS: Record all rule penalties
+        penalties.forEach(p => GameStats.record(players[turnIdx], p.name, p.count));
+        
         threeManIdx = newThreeManIdx;
         const statusStr = `ROLLED ${v1} & ${v2}\n${events.join(' | ')}`;
-        UI.setStatus(statusStr); log(`!!! ROLL RESULT: ${statusStr.replace('\n', ' | ')}`);
+        UI.setStatus(statusStr); 
         updateHUD(); isVirgin = false;
 
         if (isDoubles) {
@@ -559,15 +382,20 @@ function resolveRoll() {
                     });
                 }
             });
-        } else if (events.length > 0) { safeSetTimeout(() => { gameState = 'READY'; UI.setStatus("ROLL AGAIN"); }, 3000);
-        } else { safeSetTimeout(nextTurn, 5000); }
+        } else if (events.length > 0) { 
+            safeSetTimeout(() => { gameState = 'READY'; UI.setStatus("ROLL AGAIN"); }, 3000);
+        } else { 
+            UI.setStatus(`ROLLED ${v1} & ${v2}\n${UI.getTrashTalk('dead')}`);
+            safeSetTimeout(nextTurn, 5000); 
+        }
     }
 }
 
 function triggerSloppy() {
     if (gameState === 'SLOPPY') return;
     gameState = 'SLOPPY'; log(" [SYSTEM] SLOPPY TRIGGERED");
-    UI.setStatus("SLOPPY! DRINK 2 & REROLL");
+    UI.setStatus(`SLOPPY! DRINK 2 & REROLL\n${UI.getTrashTalk('sloppy')}`);
+    GameStats.record(null, players[turnIdx], 2); // Self-penalty
     HapticManager.error();
     safeSetTimeout(() => {
         if (gameState === 'SLOPPY') {
@@ -578,5 +406,98 @@ function triggerSloppy() {
     }, 3000);
 }
 
+// --- ENGINE LOOP ---
+function animate() {
+    requestAnimationFrame(animate);
+    const dt = 1/60; world.step(dt);
+
+    if (gameState !== 'SPLASH' && gameState !== 'SETUP') {
+        updateCamera(camera, isFreeCam);
+        const cup = scene.getObjectByName("diceCup");
+        if (cup) {
+            if (gameState === 'SHAKING') {
+                const pMesh = playerMeshes[turnIdx].mesh;
+                cup.visible = false;
+                cup.position.set(pMesh.position.x * 0.5, tableHeight + 4, pMesh.position.z * 0.5);
+            } else { cup.visible = false; }
+        }
+
+        dice.forEach((d, i) => {
+            if (gameState === 'READY' || (gameState === 'CHALLENGE_READY' && challengeType === 'SPLIT' && i >= diceRolledCount)) {
+                const pMesh = playerMeshes[turnIdx].mesh;
+                const angle = playerMeshes[turnIdx].angle;
+                const offsetX = Math.cos(angle) * (i === 0 ? -0.8 : 0.8);
+                const offsetZ = -Math.sin(angle) * (i === 0 ? -0.8 : 0.8);
+                const hoverPos = new THREE.Vector3(pMesh.position.x * 0.5 + offsetX, tableHeight + 4, pMesh.position.z * 0.5 + offsetZ);
+
+                if (!isFreeCam) {
+                    d.mesh.position.lerp(hoverPos, lerpFactor);
+                    d.mesh.scale.lerp(new THREE.Vector3(4, 4, 4), lerpFactor);
+                    d.mesh.rotation.y += 0.01;
+                    d.body.position.set(d.mesh.position.x, d.mesh.position.y, d.mesh.position.z);
+                    d.body.type = CANNON.Body.STATIC;
+                }
+            } else if (gameState === 'SHAKING') {
+                const pMesh = playerMeshes[turnIdx].mesh;
+                if (!isFreeCam) {
+                    if (d.body.type !== CANNON.Body.DYNAMIC) {
+                        d.body.type = CANNON.Body.DYNAMIC; d.body.mass = 1.0; d.body.updateMassProperties();
+                    }
+                    const jitterAmount = 0.5;
+                    d.body.position.x = pMesh.position.x * 0.5 + (Math.random()-0.5) * jitterAmount;
+                    d.body.position.z = pMesh.position.z * 0.5 + (Math.random()-0.5) * jitterAmount;
+                    d.body.position.y = tableHeight + 4 + (Math.random()-0.5) * jitterAmount;
+                    d.mesh.position.copy(d.body.position); d.mesh.quaternion.copy(d.body.quaternion);
+                    d.mesh.scale.lerp(new THREE.Vector3(1, 1, 1), lerpFactor);
+                }
+            } else {
+                if (!isFreeCam) {
+                    d.mesh.position.copy(d.body.position); d.mesh.quaternion.copy(d.body.quaternion);
+                    if (gameState === 'RESULTS') d.mesh.scale.lerp(new THREE.Vector3(4, 4, 4), lerpFactor);
+                    else d.mesh.scale.lerp(new THREE.Vector3(1, 1, 1), lerpFactor);
+                    const visualOffset = 0.095 * (d.mesh.scale.x - 1);
+                    d.mesh.position.y += visualOffset;
+                }
+            }
+        });
+
+        if (gameState === 'ROLLING' && !isFreeCam) {
+            const isStopped = dice.every(d => d.body.velocity.length() < 0.1 && d.body.angularVelocity.length() < 0.2);
+            if (isStopped) {
+                settleTimer += dt; if (settleTimer > 0.8) { log("[System] Dice settled."); resolveRoll(); }
+            } else { settleTimer = 0; }
+            if (performance.now() - rollStartTime > 8000) { resolveRoll(); }
+        }
+
+        playerMeshes.forEach(p => {
+            const vector = p.mesh.position.clone().project(camera);
+            p.labelEl.style.left = `${(vector.x * 0.5 + 0.5) * window.innerWidth}px`;
+            p.labelEl.style.top = `${(vector.y * -0.5 + 0.5) * window.innerHeight - 40}px`;
+            p.labelEl.classList.remove('hidden');
+        });
+    }
+    renderer.render(scene, camera);
+}
+
 animate();
 window.addEventListener('resize', () => handleResize(camera, renderer));
+
+document.getElementById('guide-btn').onclick = () => UI.showGuide(true);
+document.getElementById('close-guide-btn').onclick = () => UI.showGuide(false);
+
+window.addEventListener('devicemotion', (e) => {
+    if (gameState !== 'READY' && gameState !== 'SHAKING' && gameState !== 'CHALLENGE_READY') return;
+    const { x, y, z } = e.accelerationIncludingGravity;
+    accelMag = Math.sqrt(x*x + y*y + z*z);
+    if (accelMag > 22) {
+        if (gameState === 'READY' || gameState === 'CHALLENGE_READY') {
+            gameState = 'SHAKING'; setTimeout(throwDice, 800);
+        }
+    }
+});
+
+window.onmousedown = (e) => {
+    if ((gameState === 'READY' || gameState === 'CHALLENGE_READY') && e.target.tagName !== 'BUTTON' && e.target.tagName !== 'A') {
+        gameState = 'SHAKING'; setTimeout(throwDice, 800);
+    }
+};
