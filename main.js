@@ -40,6 +40,11 @@ let challengers = [];
 let diceRolledCount = 0;
 let playerMeshes = [];
 
+let isLeftDown = false;
+let isRightDown = false;
+let movement = { x: 0, y: 0 };
+const keys = {};
+
 const lerpFactor = 0.1;
 let audio;
 
@@ -498,7 +503,7 @@ function animate() {
     const dt = 1/60; world.step(dt);
 
     if (gameState !== 'SPLASH' && gameState !== 'SETUP') {
-        updateCamera(camera, isFreeCam);
+        updateCamera(camera, gameState, playerMeshes, turnIdx, dice, tableHeight, lerpFactor, isLeftDown, isRightDown, movement, keys, dt);
         const cup = scene.getObjectByName("diceCup");
         if (cup) {
             if (gameState === 'SHAKING') {
@@ -585,8 +590,24 @@ window.addEventListener('devicemotion', (e) => {
     }
 });
 
+window.addEventListener('mousemove', (e) => {
+    movement.x = e.movementX;
+    movement.y = e.movementY;
+});
+
+window.addEventListener('keydown', (e) => { keys[e.code] = true; });
+window.addEventListener('keyup', (e) => { keys[e.code] = false; });
+
 window.onmousedown = (e) => {
+    if (e.button === 0) isLeftDown = true;
+    if (e.button === 2) isRightDown = true;
+
     if ((gameState === 'READY' || gameState === 'CHALLENGE_READY') && e.target.tagName !== 'BUTTON' && e.target.tagName !== 'A') {
         gameState = 'SHAKING'; setTimeout(throwDice, 800);
     }
+};
+
+window.onmouseup = (e) => {
+    if (e.button === 0) isLeftDown = false;
+    if (e.button === 2) isRightDown = false;
 };
