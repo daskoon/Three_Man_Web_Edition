@@ -2,18 +2,31 @@
  * @file audio.js
  * @description Premium Audio Engine for Three Man (Director's Cut).
  * 
- * WHAT: This module manages a pool of high-fidelity audio samples and 
- * provides a "Web-as-Reference" architecture for future native porting.
+ * WHO: Principal Architect (Agent) & The Boss (Skoon).
+ * WHAT: Manages high-fidelity sample playback, debouncing, and material-specific SFX.
+ * WHY: To provide an immersive, tactile soundscape that reacts to physics velocities.
+ * HOW: Using Web Audio API with a custom AudioPoolManager for low-latency playback.
+ * WHEN: Triggered by collision events in main.js.
+ * WHERE: Audio subsystem of the game engine.
  */
 
+/**
+ * WHAT: Sample Resource Manager.
+ * WHY: To handle loading, decoding, and randomized playback of audio buffers.
+ * HOW: Stores decoded AudioBuffers in a Map; handles per-ID debouncing.
+ */
 class AudioPoolManager {
     constructor(ctx) {
         this.ctx = ctx;
         this.samples = new Map();
         this.lastPlayTime = new Map();
-        this.debounceMs = 20; // Lowered for more responsive rattling
+        this.debounceMs = 20; // WHY: To prevent "Machine Gun" audio artifacts during fast rattles.
     }
 
+    /**
+     * WHAT: Asset Loader.
+     * WHY: To asynchronously fetch and decode OGG/MP3 files into memory.
+     */
     async loadSample(name, url) {
         if (!this.ctx) return;
         try {
@@ -27,6 +40,11 @@ class AudioPoolManager {
         }
     }
 
+    /**
+     * WHAT: Trigger Function.
+     * WHY: To play a specific sample with dynamic randomization.
+     * HOW: Creates a BufferSource, applies detune/gain, and connects to destination.
+     */
     play(name, options = {}) {
         if (!this.ctx || !this.samples.has(name)) return;
 
@@ -34,7 +52,8 @@ class AudioPoolManager {
         const debounceId = `${name}_${options.id || 'default'}`;
         const lastTime = this.lastPlayTime.get(debounceId) || 0;
 
-        // Collision Debouncing per ID (to allow simultaneous dice sounds)
+        // WHAT: Per-Object Debouncing.
+        // WHY: Allows multiple dice to sound simultaneously without one muting the other.
         if (now - lastTime < this.debounceMs) return;
         this.lastPlayTime.set(debounceId, now);
 
@@ -44,30 +63,34 @@ class AudioPoolManager {
 
         source.buffer = buffer;
 
-        // Dynamic Pitch Randomization (+/- 10%)
-        // detune: base shift provided by material (felt vs wood)
+        // WHAT: Dynamic Pitch Jitter.
+        // WHY: Prevents repetitive "robotic" sounds.
         const baseDetune = options.detune || 0;
-        const jitter = (Math.random() - 0.5) * 200; // cents
+        const jitter = (Math.random() - 0.5) * 200; 
         source.detune.value = baseDetune + jitter;
 
-        // Volume Scaling
+        // WHAT: Volume Scaling.
         const volume = options.volume !== undefined ? options.volume : 0.5;
         gain.gain.setValueAtTime(volume, this.ctx.currentTime);
 
         source.connect(gain);
         gain.connect(this.ctx.destination);
-
         source.start(0);
     }
 }
 
+/**
+ * WHAT: High-Level Audio Controller.
+ * WHY: Provides a clean API for the main game loop to trigger material-based sounds.
+ */
 export class DirectorAudio {
     constructor() {
         try {
             this.ctx = new (window.AudioContext || window.webkitAudioContext)();
             this.pool = new AudioPoolManager(this.ctx);
             
-            // Local Assets (Served from the same domain to avoid CORS)
+            // WHAT: Local Asset Mapping.
+            // WHY: To avoid CORS issues and ensure fast loading from the same domain.
             this.urls = {
                 CLACK: "assets/audio/wood_clack.ogg",
                 THUD: "assets/audio/roll_impact.ogg"
@@ -79,13 +102,13 @@ export class DirectorAudio {
     }
 
     /**
-     * WHY: Browsers block audio until a user interaction.
+     * WHAT: Audio Context Unlock.
+     * WHY: Browsers block audio until an explicit user interaction (The PLAY button).
      */
     async resume() {
         if (this.ctx && this.ctx.state === 'suspended') {
             await this.ctx.resume();
         }
-        // Prefetch samples on resume
         if (this.ctx) {
             try {
                 await Promise.all([
@@ -99,29 +122,27 @@ export class DirectorAudio {
     }
 
     /**
-     * WHAT: Table "Felt" Thud.
-     * WHY: Muffled low-frequency hit.
+     * WHAT: Table "Felt" Impact.
+     * WHY: To provide a muffled, heavy thud sound.
      */
     playFelt(velocity, id = 0) {
         if (!this.pool) return;
         const vol = Math.min(velocity / 25, 0.5);
-        // Randomize pitch slightly lower for felt
         this.pool.play('THUD', { volume: vol, detune: -200, id });
     }
 
     /**
-     * WHAT: Rail "Wood" Clack.
-     * WHY: Sharp, high-frequency impact.
+     * WHAT: Rail "Wood" Impact.
+     * WHY: To provide a sharp, bright clack sound.
      */
     playWood(velocity, id = 0) {
         if (!this.pool) return;
         const vol = Math.min(velocity / 15, 0.7);
-        // Randomize pitch slightly higher for wood
         this.pool.play('CLACK', { volume: vol, detune: 200, id });
     }
 
     /**
-     * WHAT: Dice-on-Dice "Clack".
+     * WHAT: Dice-on-Dice Collision.
      */
     playClack(velocity, id = 0) {
         if (!this.pool) return;
@@ -130,8 +151,8 @@ export class DirectorAudio {
     }
 
     /**
-     * WHAT: SOCIAL! Callout.
-     * WHY: Keep original synthesis for unique UI tones.
+     * WHAT: SOCIAL! UI Tone.
+     * WHY: Unique synthesized sound for the "Everyone Drinks" rule.
      */
     playSocial() {
         if (!this.ctx) return;
