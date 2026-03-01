@@ -310,16 +310,19 @@ document.getElementById('start-game-btn').onclick = () => {
 /**
  * WHAT: Quick Launch Handler.
  * WHY: To bypass the manual setup phase for rapid testing or 'Jump In' play.
- * HOW: Manually populates the `players` array with original founding members. Triggers the same logic as the standard Start button.
+ * HOW: Maintains an internal pool of founding members. Uses `Array.sort(() => 0.5 - Math.random())` to shuffle the list and `slice(0, 5)` to select exactly five random names for the session.
  */
 document.getElementById('quick-play-btn').onclick = () => {
-    players = [
+    const pool = [
         "The Skoon", "Kate", "Rich Morehead", "Blaze", 
         "Jesskanka", "Crusty", "Spacepants", "Kim Sexy", "Ashley", 
         "Lucifer", "Jess", "Lauren", "Joey Bars", "Egz", "BM", 
         "Black Larry", "Shadow"
     ];
-    log("[System] Quick Launch initiated with the full Delco Founding Roster (respectfully excluding Rob).");
+    // Shuffle and pick 5
+    players = pool.sort(() => 0.5 - Math.random()).slice(0, 5);
+    
+    log(`[System] Quick Launch initiated with 5 random founding players: ${players.join(', ')}`);
     GameStats.init(players);
     setupPlayerPresences();
     UI.setup.classList.add('hidden');
@@ -422,7 +425,6 @@ function resolveRoll() {
         // WHAT: Voice-over Logic.
         if (audio) {
             if (newThreeManIdx !== threeManIdx) audio.playThreeMan();
-            else if (events.some(e => e.includes("SOCIAL"))) audio.playCheers();
             else if (threeManPenalty) audio.playSocial(); 
         }
         
