@@ -22,8 +22,8 @@ export function createDieTexture(number, renderer) {
     canvas.width = 256; canvas.height = 256;
     const ctx = canvas.getContext('2d');
     
-    // Background: Translucent Casino Red
-    ctx.fillStyle = 'rgba(220, 20, 60, 0.8)';
+    // Background: Solid Deep Casino Red
+    ctx.fillStyle = '#b22222';
     ctx.fillRect(0, 0, 256, 256);
     
     // Pip Filling: Flush White Pips (Equal density paint simulation)

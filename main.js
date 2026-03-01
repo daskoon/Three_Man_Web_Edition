@@ -101,12 +101,12 @@ function initializeGameObjects() {
         const diceMaterial = phys.diceMaterial;
 
         dieMaterials = [
-            new THREE.MeshStandardMaterial({ map: createDieTexture(2, renderer), color: 0xff0000, emissive: 0x330000 }),
-            new THREE.MeshStandardMaterial({ map: createDieTexture(5, renderer), color: 0xff0000, emissive: 0x330000 }),
-            new THREE.MeshStandardMaterial({ map: createDieTexture(1, renderer), color: 0xff0000, emissive: 0x330000 }),
-            new THREE.MeshStandardMaterial({ map: createDieTexture(6, renderer), color: 0xff0000, emissive: 0x330000 }),
-            new THREE.MeshStandardMaterial({ map: createDieTexture(3, renderer), color: 0xff0000, emissive: 0x330000 }),
-            new THREE.MeshStandardMaterial({ map: createDieTexture(4, renderer), color: 0xff0000, emissive: 0x330000 })
+            new THREE.MeshStandardMaterial({ map: createDieTexture(2, renderer) }),
+            new THREE.MeshStandardMaterial({ map: createDieTexture(5, renderer) }),
+            new THREE.MeshStandardMaterial({ map: createDieTexture(1, renderer) }),
+            new THREE.MeshStandardMaterial({ map: createDieTexture(6, renderer) }),
+            new THREE.MeshStandardMaterial({ map: createDieTexture(3, renderer) }),
+            new THREE.MeshStandardMaterial({ map: createDieTexture(4, renderer) })
         ];
 
         dice = [
@@ -120,8 +120,9 @@ function initializeGameObjects() {
 
             // COLLISION LISTENER (Premium Audio/Haptics)
             d.body.addEventListener('collide', (e) => {
-                // IMPORTANT: Prevent ghost clacks after settlement
+                // IMPORTANT: Prevent ghost clacks after settlement or during sleep
                 if (gameState !== 'ROLLING' && gameState !== 'SHAKING') return;
+                if (d.body.sleepState === CANNON.Body.SLEEPING) return;
                 
                 const velocity = e.contact.getImpactVelocityAlongNormal();
                 if (velocity < 0.5) return; // Ignore micro-jitters
