@@ -107,8 +107,20 @@ export function evaluateRules(v1, v2, players, turnIdx, threeManIdx, isVirgin) {
             else if (rule.target === 'left') targetNames.push(players[(turnIdx - 1 + players.length) % players.length]);
             else if (rule.target === 'right') targetNames.push(players[(turnIdx + 1) % players.length]);
 
-            const drinkCount = rule.action === 'drink_2' ? 2 : 1;
-            targetNames.forEach(name => penalties.push({ name, count: drinkCount, reason: "CUSTOM LAW" }));
+            // WHAT: Action Resolution.
+            // WHY: Maps Mad-Libs strings to actual penalty counts or state changes.
+            if (rule.action === 'become_3man') {
+                if (targetNames.length > 0) {
+                    // Note: If multiple people are targeted (e.g. Everyone), 
+                    // only the last one in the array actually keeps the title.
+                    newThreeManIdx = players.indexOf(targetNames[targetNames.length - 1]);
+                }
+            } else {
+                let drinkCount = 1;
+                if (rule.action === 'drink_2') drinkCount = 2;
+                if (rule.action === 'drink_3') drinkCount = 3;
+                targetNames.forEach(name => penalties.push({ name, count: drinkCount, reason: "CUSTOM LAW" }));
+            }
         }
     });
 
