@@ -37,19 +37,22 @@ export const GameStats = {
         this.players[to].received += count;
 
         // WHAT: Aggressor Tracking & Rivalries.
-        if (from && from !== to && this.players[from]) {
+        if (from && this.players[from]) {
+            // WHAT: Total Chaos Tracking.
+            // WHY: Roller still gets 'credit' for causing self-inflicted drinks.
             this.players[from].given += count;
 
-            // WHAT: Rivalry Key Generation.
-            // WHY: To track "Skoon made Blaze drink all night".
-            const key = `${from}->${to}`;
-            this.rivalries[key] = (this.rivalries[key] || 0) + count;
+            if (from !== to) {
+                // WHAT: Rivalry Key Generation.
+                const key = `${from}->${to}`;
+                this.rivalries[key] = (this.rivalries[key] || 0) + count;
 
-            // WHAT: Streak Tracking.
-            // WHY: To identify "Rampage" states or high scores.
-            this.players[from].currentStreak++;
-            if (this.players[from].currentStreak > this.players[from].maxStreak) {
-                this.players[from].maxStreak = this.players[from].currentStreak;
+                // WHAT: Streak Tracking (Offensive).
+                // WHY: To identify "Rampage" states.
+                this.players[from].currentStreak++;
+                if (this.players[from].currentStreak > this.players[from].maxStreak) {
+                    this.players[from].maxStreak = this.players[from].currentStreak;
+                }
             }
 
             // WHAT: Victim Streak Reset.

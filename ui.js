@@ -26,18 +26,26 @@ export const UI = {
     logBtn: document.getElementById('download-logs-btn'),
     guide: document.getElementById('guide-screen'),
     guideBody: document.getElementById('guide-body'),
+    passingScreen: document.getElementById('passing-screen'),
+    passingInfo: document.getElementById('passing-player-info'),
+    passConfirmBtn: document.getElementById('pass-confirm-btn'),
 
     /**
      * WHAT: Player List Renderer.
      * WHY: To show current players during the lobby/setup phase.
+     * HOW: Iterates names and generates HTML. Sanitizes output to prevent XSS.
      */
     renderPlayers(players, removeCallback) {
-        this.playerList.innerHTML = players.map((p, k) => `
-            <div class='player-entry'>
-                <span>${p}</span>
-                <button class="remove-btn" data-idx="${k}">X</button>
-            </div>
-        `).join('');
+        this.playerList.innerHTML = players.map((p, k) => {
+            // WHAT: XSS Protection.
+            const safeName = p.replace(/</g, "&lt;").replace(/>/g, "&gt;");
+            return `
+                <div class='player-entry'>
+                    <span>${safeName}</span>
+                    <button class="remove-btn" data-idx="${k}">X</button>
+                </div>
+            `;
+        }).join('');
         
         this.playerList.querySelectorAll('.remove-btn').forEach(btn => {
             btn.onclick = () => removeCallback(parseInt(btn.dataset.idx));
@@ -194,18 +202,13 @@ export const UI = {
     /**
      * WHAT: Pass the Phone Overlay.
      * WHY: To prevent accidental rolls during Hotseat transitions.
-     * HOW: Forces a button click before unlocking the next turn.
+     * HOW: Uses a dedicated overlay. Forces a button click before unlocking the next turn.
      */
     showPassPhone(playerName, callback) {
-        this.setup.classList.remove('hidden');
-        this.setup.querySelector('h1').innerText = "PASS THE PHONE";
-        this.setup.querySelector('#player-list').innerHTML = `<h2 style="color:var(--gold); font-size: 2rem; margin-top: 20px;">${playerName.toUpperCase()}</h2><p style="margin-bottom: 20px;">IT IS YOUR TURN</p>`;
-        this.setup.querySelector('.input-row').classList.add('hidden');
-        const startBtn = this.setup.querySelector('#start-game-btn');
-        startBtn.innerText = "I HAVE THE DICE";
-        startBtn.onclick = () => {
-            this.setup.classList.add('hidden');
-            this.setup.querySelector('.input-row').classList.remove('hidden');
+        this.passingScreen.classList.remove('hidden');
+        this.passingInfo.innerHTML = `<h2 style="color:var(--gold); font-size: 2rem; margin-top: 20px;">${playerName.toUpperCase()}</h2><p style="margin-bottom: 20px;">IT IS YOUR TURN</p>`;
+        this.passConfirmBtn.onclick = () => {
+            this.passingScreen.classList.add('hidden');
             callback();
         };
     }

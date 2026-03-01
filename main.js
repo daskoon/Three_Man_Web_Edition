@@ -130,6 +130,10 @@ function initializeGameObjects(diceMaterial) {
             d.mesh.castShadow = true;
             scene.add(d.mesh);
 
+            /**
+             * WHAT: Collision Logic Handler.
+             * WHY: To trigger material-specific audio/haptics based on physics data.
+             */
             const onCollide = (e) => {
                 if (gameState !== 'ROLLING' && gameState !== 'SHAKING') return;
                 if (d.body.sleepState === CANNON.Body.SLEEPING) return;
@@ -154,9 +158,12 @@ function initializeGameObjects(diceMaterial) {
                 }
             };
 
-            if (d.body._lastListener) d.body.removeEventListener('collide', d.body._lastListener);
+            // WHAT: Listener Lifecycle Management.
+            // WHY: To prevent 'Ghost Clacks' by ensuring only one listener exists per body.
+            // HOW: Stores the function reference on the body object for reliable removal.
+            if (d.body._collideListener) d.body.removeEventListener('collide', d.body._collideListener);
+            d.body._collideListener = onCollide;
             d.body.addEventListener('collide', onCollide);
-            d.body._lastListener = onCollide;
         });
         
         log("[System] Dice and Materials initialized.");
@@ -402,7 +409,8 @@ function triggerSloppy() {
     if (gameState === 'SLOPPY') return;
     gameState = 'SLOPPY'; log(" [SYSTEM] SLOPPY TRIGGERED");
     UI.setStatus(`SLOPPY! DRINK 2 & REROLL\n${UI.getTrashTalk('sloppy')}`);
-    GameStats.record(null, players[turnIdx], 2); 
+    // STATS: Record as chaos caused by the roller (even if to themselves)
+    GameStats.record(players[turnIdx], players[turnIdx], 2); 
     HapticManager.error();
     safeSetTimeout(() => {
         if (gameState === 'SLOPPY') {
