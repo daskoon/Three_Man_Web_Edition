@@ -92,13 +92,9 @@ window.onerror = (msg, url, line) => {
 let dieMaterials = [];
 let dice = [];
 
-function initializeGameObjects() {
+function initializeGameObjects(diceMaterial) {
     try {
         if (!renderer || !world) return;
-        
-        // Re-run setupPhysics if needed or get material
-        const phys = setupPhysics(); 
-        const diceMaterial = phys.diceMaterial;
 
         dieMaterials = [
             new THREE.MeshStandardMaterial({ map: createDieTexture(2, renderer) }),
@@ -110,8 +106,8 @@ function initializeGameObjects() {
         ];
 
         dice = [
-            { mesh: new THREE.Mesh(new THREE.BoxGeometry(0.19, 0.19, 0.19), dieMaterials), body: createDieBody(-0.6, world, diceMaterial) },
-            { mesh: new THREE.Mesh(new THREE.BoxGeometry(0.19, 0.19, 0.19), dieMaterials), body: createDieBody(0.6, world, diceMaterial) }
+            { mesh: new THREE.Mesh(new THREE.BoxGeometry(0.19, 0.19, 0.19), dieMaterials), body: createDieBody(-0.6, world, diceMaterial) },     
+            { mesh: new THREE.Mesh(new THREE.BoxGeometry(0.19, 0.19, 0.19), dieMaterials), body: createDieBody(0.6, world, diceMaterial) }       
         ];
         
         dice.forEach((d, i) => {
@@ -119,35 +115,38 @@ function initializeGameObjects() {
             scene.add(d.mesh);
 
             // COLLISION LISTENER (Premium Audio/Haptics)
-            // Remove existing listener if any to prevent duplicates
-            d.body.removeEventListener('collide'); 
-            d.body.addEventListener('collide', (e) => {
+            const onCollide = (e) => {
                 // IMPORTANT: Strictly prevent audio during transition or results
                 if (gameState !== 'ROLLING' && gameState !== 'SHAKING') return;
                 if (d.body.sleepState === CANNON.Body.SLEEPING) return;
-                
+
                 const velocity = e.contact.getImpactVelocityAlongNormal();
                 if (velocity < 0.8) return; // Increased threshold to ignore micro-settling
 
                 // Distinguish collision types
                 const otherBody = e.body;
                 const isDieOnDie = dice.some(other => other.body === otherBody);
-                
+
                 // Identify Rails (Wood) vs Floor (Felt)
                 const isFloor = otherBody.position.y === 4.0;
                 const isRail = !isDieOnDie && !isFloor;
 
                 if (isDieOnDie) {
-                    if (audio) audio.playClack(velocity);
+                    if (audio) audio.playClack(velocity, i);
                     HapticManager.tick();
                 } else if (isRail) {
-                    if (audio) audio.playWood(velocity);
+                    if (audio) audio.playWood(velocity, i);
                     HapticManager.click();
                 } else {
-                    if (audio) audio.playFelt(velocity);
+                    if (audio) audio.playFelt(velocity, i);
                     HapticManager.click();
                 }
-            });
+            };
+
+            // Clean up old listener if it exists
+            if (d.body._lastListener) d.body.removeEventListener('collide', d.body._lastListener);
+            d.body.addEventListener('collide', onCollide);
+            d.body._lastListener = onCollide;
         });
         
         log("[System] Dice and Materials initialized with Collision Listeners.");
@@ -155,7 +154,6 @@ function initializeGameObjects() {
         log(`[CRITICAL] GameObject initialization failed: ${e.message}`);
     }
 }
-
 // Initial call removed - moving into init-btn for safety
 
 function setupPlayerPresences() {
@@ -252,7 +250,8 @@ document.getElementById('init-btn').onclick = async (e) => {
     }
 
     // Ensure objects are initialized before moving to SETUP
-    initializeGameObjects();
+    const phys = setupPhysics();
+    initializeGameObjects(phys.diceMaterial);
     
     if (dice.length < 2) {
         log("[CRITICAL] Game objects failed to initialize.");
@@ -417,16 +416,17 @@ function animate() {
                     d.body.position.set(d.mesh.position.x, d.mesh.position.y, d.mesh.position.z);
                     d.body.type = CANNON.Body.STATIC;
                 }
-            } else if (gameState === 'SHAKING') {
-                const pMesh = playerMeshes[turnIdx].mesh;
-                // Trap dice inside cup
-                if (!isFreeCam) {
-                    d.body.type = CANNON.Body.DYNAMIC;
-                    d.body.mass = 1.0;
-                    d.body.updateMassProperties();
-                    
-                    // Jitter dice inside cup to cause collisions/clacks
-                    const jitter = 0.5;
+                        } else if (gameState === 'SHAKING') {
+                            const pMesh = playerMeshes[turnIdx].mesh;
+                            // Trap dice inside cup
+                            if (!isFreeCam) {
+                                if (d.body.type !== CANNON.Body.DYNAMIC) {
+                                    d.body.type = CANNON.Body.DYNAMIC;
+                                    d.body.mass = 1.0;
+                                    d.body.updateMassProperties();
+                                }
+            
+                                // Jitter dice inside cup to cause collisions/clacks                    const jitter = 0.5;
                     d.body.position.x = pMesh.position.x * 0.5 + (Math.random()-0.5) * jitter;
                     d.body.position.z = pMesh.position.z * 0.5 + (Math.random()-0.5) * jitter;
                     d.body.position.y = tableHeight + 4 + (Math.random()-0.5) * jitter;

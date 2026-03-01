@@ -67,7 +67,7 @@ export function setupPhysics() {
     const diceContactMaterial = new CANNON.ContactMaterial(diceMaterial, diceMaterial, {
         friction: 0.3,
         restitution: 0.5,
-        contactEquationStiffness: 1e7,
+        contactEquationStiffness: 1e6,
         contactEquationRelaxation: 3
     });
     world.addContactMaterial(diceContactMaterial);

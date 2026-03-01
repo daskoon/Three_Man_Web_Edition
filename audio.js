@@ -31,11 +31,12 @@ class AudioPoolManager {
         if (!this.ctx || !this.samples.has(name)) return;
 
         const now = this.ctx.currentTime * 1000;
-        const lastTime = this.lastPlayTime.get(name) || 0;
+        const debounceId = `${name}_${options.id || 'default'}`;
+        const lastTime = this.lastPlayTime.get(debounceId) || 0;
 
-        // Collision Debouncing
+        // Collision Debouncing per ID (to allow simultaneous dice sounds)
         if (now - lastTime < this.debounceMs) return;
-        this.lastPlayTime.set(name, now);
+        this.lastPlayTime.set(debounceId, now);
 
         const buffer = this.samples.get(name);
         const source = this.ctx.createBufferSource();
@@ -86,10 +87,14 @@ export class DirectorAudio {
         }
         // Prefetch samples on resume
         if (this.ctx) {
-            await Promise.all([
-                this.pool.loadSample('CLACK', this.urls.CLACK),
-                this.pool.loadSample('THUD', this.urls.THUD)
-            ]);
+            try {
+                await Promise.all([
+                    this.pool.loadSample('CLACK', this.urls.CLACK),
+                    this.pool.loadSample('THUD', this.urls.THUD)
+                ]);
+            } catch (e) {
+                console.error("[AudioPool] Initial pre-fetch failed:", e.message);
+            }
         }
     }
 
@@ -97,31 +102,31 @@ export class DirectorAudio {
      * WHAT: Table "Felt" Thud.
      * WHY: Muffled low-frequency hit.
      */
-    playFelt(velocity) {
+    playFelt(velocity, id = 0) {
         if (!this.pool) return;
         const vol = Math.min(velocity / 25, 0.5);
         // Randomize pitch slightly lower for felt
-        this.pool.play('THUD', { volume: vol, detune: -200 });
+        this.pool.play('THUD', { volume: vol, detune: -200, id });
     }
 
     /**
      * WHAT: Rail "Wood" Clack.
      * WHY: Sharp, high-frequency impact.
      */
-    playWood(velocity) {
+    playWood(velocity, id = 0) {
         if (!this.pool) return;
         const vol = Math.min(velocity / 15, 0.7);
         // Randomize pitch slightly higher for wood
-        this.pool.play('CLACK', { volume: vol, detune: 200 });
+        this.pool.play('CLACK', { volume: vol, detune: 200, id });
     }
 
     /**
      * WHAT: Dice-on-Dice "Clack".
      */
-    playClack(velocity) {
+    playClack(velocity, id = 0) {
         if (!this.pool) return;
         const vol = Math.min(velocity / 15, 0.6);
-        this.pool.play('CLACK', { volume: vol });
+        this.pool.play('CLACK', { volume: vol, id });
     }
 
     /**
