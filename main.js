@@ -289,8 +289,13 @@ document.getElementById('start-game-btn').onclick = () => {
  * HOW: Manually populates the `players` array with original founding members. Triggers the same logic as the standard Start button.
  */
 document.getElementById('quick-play-btn').onclick = () => {
-    players = ["Tim", "Face", "Skoon", "Kate", "Rich"];
-    log("[System] Quick Launch initiated with Founding Players.");
+    players = [
+        "The Skoon", "Kate", "Rich Morehead", "Big Gay Rob", "Blaze", 
+        "Jesskanka", "Crusty", "Spacepants", "Kim Sexy", "Ashley", 
+        "Lucifer", "Jess", "Lauren", "Joey Bars", "Egz", "BM", 
+        "Black Larry", "Shadow"
+    ];
+    log("[System] Quick Launch initiated with the full Delco Founding Roster.");
     GameStats.init(players);
     setupPlayerPresences();
     UI.setup.classList.add('hidden');
