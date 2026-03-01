@@ -371,12 +371,12 @@ function resolveRoll() {
             UI.showDoublesChoice((type) => {
                 challengeType = type; originalRollerIdx = turnIdx;
                 if (type === 'SINGLE') {
-                    UI.showPicker("PICK ONE CHALLENGER", players, 1, (picked) => {
+                    UI.showPicker("PICK ONE CHALLENGER", players, 1, turnIdx, (picked) => {
                         challengers = picked; turnIdx = picked[0];
                         gameState = 'CHALLENGE_READY'; UI.setStatus(`${players[turnIdx].toUpperCase()}\nSHAKE TO CHALLENGE`);
                     });
                 } else {
-                    UI.showPicker("PICK TWO CHALLENGERS", players, 2, (picked) => {
+                    UI.showPicker("PICK TWO CHALLENGERS", players, 2, turnIdx, (picked) => {
                         challengers = picked; turnIdx = picked[0]; diceRolledCount = 0;
                         gameState = 'CHALLENGE_READY'; UI.setStatus(`${players[turnIdx].toUpperCase()}\nROLL DIE 1`);
                     });

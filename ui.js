@@ -135,10 +135,27 @@ export const UI = {
         document.getElementById('choice-split').onclick = () => callback('SPLIT');
     },
 
-    showPicker(title, players, maxNeeded, callback) {
+    /**
+     * WHAT: Challenger Selection UI.
+     * WHY: Picks 1 or 2 players for the challenge.
+     * HOW: Filters out the current roller to prevent self-challenging.
+     * @param {string} title - Header text for the modal.
+     * @param {Array} players - List of all player names.
+     * @param {number} maxNeeded - How many players to pick.
+     * @param {number} excludedIdx - The index of the roller (to be hidden).
+     * @param {function} callback - Called with [indices] of picked players.
+     */
+    showPicker(title, players, maxNeeded, excludedIdx, callback) {
         const selected = [];
         this.doublesTitle.innerText = title;
-        this.btns.innerHTML = players.map((p, i) => `<button class="give-btn pick-btn" data-idx="${i}">${p}</button>`).join('');
+        
+        // WHAT: Player List Filtering.
+        // WHY: Per Boss request - roller cannot choose themselves.
+        this.btns.innerHTML = players.map((p, i) => {
+            if (i === excludedIdx) return ""; // Skip the roller
+            return `<button class="give-btn pick-btn" data-idx="${i}">${p}</button>`;
+        }).join('');
+        
         this.btns.querySelectorAll('.pick-btn').forEach(btn => {
             btn.onclick = () => {
                 const idx = parseInt(btn.dataset.idx);
