@@ -429,10 +429,11 @@ function animate() {
                                     d.body.updateMassProperties();
                                 }
             
-                                // Jitter dice inside cup to cause collisions/clacks                    const jitter = 0.5;
-                    d.body.position.x = pMesh.position.x * 0.5 + (Math.random()-0.5) * jitter;
-                    d.body.position.z = pMesh.position.z * 0.5 + (Math.random()-0.5) * jitter;
-                    d.body.position.y = tableHeight + 4 + (Math.random()-0.5) * jitter;
+                                                    // Jitter dice inside cup to cause collisions/clacks
+                                                    const jitterAmount = 0.5;
+                                                    d.body.position.x = pMesh.position.x * 0.5 + (Math.random()-0.5) * jitterAmount;
+                                                    d.body.position.z = pMesh.position.z * 0.5 + (Math.random()-0.5) * jitterAmount;
+                                                    d.body.position.y = tableHeight + 4 + (Math.random()-0.5) * jitterAmount;
                     
                     d.mesh.position.copy(d.body.position);
                     d.mesh.quaternion.copy(d.body.quaternion);

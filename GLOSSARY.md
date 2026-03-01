@@ -13,8 +13,7 @@ This document defines the specific terminology and spatial references used in th
 *   **The Rails:** The circular/octagonal gold collision "cage" surrounding the table. Reduced to 0.5m height (1/8 of original) to allow for "Sloppy" hops. These keep the dice from flying off the table under normal conditions.
 *   **The Felt:** The visual top of the table (`tableTop`). It must always align perfectly with the **Floor** (y=4.0) to prevent dice from sinking or floating.
 *   **The Rim:** The thin wooden visual cylinder surrounding the table.
-*   **The Die (19mm):** A standard casino-grade cube. Visually scaled up by 4x during the `READY` and `RESULTS` states for readability. Shrunk to 1x scale and made dynamic when placed inside the **Dice Cup**.
-*   **The Dice Cup:** A leather visual container used during the `SHAKING` state. It physically confines the dice, forcing them to collide and "clack" before being thrown.
+*   **The Die (19mm):** A standard casino-grade cube. Visually scaled up by 4x during the `READY` and `RESULTS` states for readability.
 
 ## 3. Game States & Physics
 *   **Forward Momentum:** The horizontal impulse applied toward the center (0,0,0) when a throw is triggered.
@@ -26,3 +25,9 @@ This document defines the specific terminology and spatial references used in th
 *   **"Hand of God":** The interaction model where the user's phone motion directly influences the dice (Shake to Roll).
 *   **Virgin Roll:** The first roll of a player's turn. If it results in no penalties, they drink 1 and roll again.
 *   **Social:** Any roll involving a 4 (Face 4 or Sum 4). Triggers the synthesized audio callout.
+
+## 5. Advanced Audio & Logic Terms
+*   **Material Intelligence:** The system's ability to distinguish between **Felt** (table), **Wood** (rails), and **Dice** (dice-on-dice) impacts to trigger unique, physics-accurate sounds.
+*   **Per-Object Debouncing:** An audio optimization that allows both dice to clack simultaneously while preventing a single die from "machine-gunning" (triggering too many sounds in a split second).
+*   **The Dead Roll:** A roll that results in no drinking penalties or rule triggers. This ends the player's turn and passes the dice to the right.
+*   **Double Matching:** A condition in the Doubles Challenge where the challenger(s) roll a double, forcing the original roller to drink and lose their turn.
