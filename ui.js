@@ -133,7 +133,18 @@ export const UI = {
                 <td><div class="dice-pair-ui">${this.renderDieUI(c.v1)}${this.renderDieUI(c.v2)}</div></td>
                 <td>${c.desc}</td>
             </tr>
-        `).join('');
+        `).join('') + `
+            <tr>
+                <td colspan="2" style="background: rgba(255,215,0,0.1); padding: 15px; border-top: 2px solid var(--gold);">
+                    <h3 style="color:var(--gold); margin-top:0;">LAWMAKER COMMANDMENTS</h3>
+                    <p style="font-size:0.7rem; color:#ccc; margin:0;">
+                        1. No Rule Interference: Laws cannot overwrite core rules.<br>
+                        2. No Direct Targeting: Laws must target roles, not names.<br>
+                        3. Sanity Cap: Max penalty is 3 drinks. Don't die.
+                    </p>
+                </td>
+            </tr>
+        `;
     },
 
     renderDieUI(val) {
