@@ -5,7 +5,7 @@
  * WHO: Principal Architect (Agent) & The Boss (Skoon).
  * WHAT: The brain of the application. Manages the state machine, physics loop, and systems integration.
  * WHY: To provide a high-fidelity, polished WebGL experience for Three Man.
- * HOW: Orchestrates Cannon-es physics, Three.js rendering, and custom rule/UI modules.
+ * HOW: Implements a discrete state machine (SPLASH -> SETUP -> READY -> SHAKING -> ROLLING -> RESULTS) using a top-level string variable. Orchestrates the Cannon-es physics world (`world.step`) and Three.js rendering loop (`requestAnimationFrame`). Synchronizes physical bodies to visual meshes by copying `body.position` and `body.quaternion` every frame.
  * WHEN: Continuous execution via requestAnimationFrame.
  * WHERE: Root orchestrator for the web application.
  */
@@ -28,12 +28,12 @@ let players = [];
 let turnIdx = 0;
 let threeManIdx = -1;
 let isVirgin = true;
-let gameState = 'SPLASH'; // States: SPLASH, SETUP, READY, SHAKING, ROLLING, RESULTS, DECIDING, CHALLENGE_READY, PASSING
+let gameState = 'SPLASH'; 
 let settleTimer = 0;
 let rollStartTime = 0;
 let accelMag = 0;
 let gameTimer = null;
-let challengeType = null; // 'SINGLE' or 'SPLIT'
+let challengeType = null; 
 let originalRollerIdx = -1;
 let challengers = [];
 let diceRolledCount = 0;
@@ -46,6 +46,7 @@ let audio;
 /**
  * WHAT: Vibration Bridge.
  * WHY: Simple wrapper for the HapticManager.
+ * HOW: Proxies calls to `navigator.vibrate` through the `HapticManager` abstraction to ensure cross-platform safety.
  */
 const vibrate = (pattern) => {
     HapticManager.vibrate(pattern);
@@ -53,7 +54,8 @@ const vibrate = (pattern) => {
 
 /**
  * WHAT: Timed Action Wrapper.
- * WHY: To ensure only one game timer is active at a time.
+ * WHY: To ensure only one game timer is active at a time and prevent memory leaks.
+ * HOW: Uses `clearTimeout` on the global `gameTimer` reference before initializing a new `setTimeout` call.
  */
 const safeSetTimeout = (fn, delay) => {
     clearTimeout(gameTimer);
@@ -86,7 +88,7 @@ try {
     const phys = setupPhysics();
     world = phys.world;
     setupEnvironment(scene);
-    initLogButton(() => {}); // Empty callback for now
+    initLogButton(() => {}); 
     log("[System] Physics and Environment setup complete.");
 } catch (e) {
     log(`[CRITICAL] Setup failed: ${e.message}`);
@@ -104,7 +106,7 @@ let dice = [];
 /**
  * WHAT: Game Object Construction.
  * WHY: Creates the physical and visual dice.
- * HOW: Maps procedural textures to BoxGeometries and Cannon bodies.
+ * HOW: Maps procedural textures (Canvas-generated) to `THREE.BoxGeometry` faces. Simultaneously creates `CANNON.Body` boxes with matching dimensions (0.19 units) and attaches a `collide` event listener to each body to trigger material-specific SFX.
  */
 function initializeGameObjects(diceMaterial) {
     try {
@@ -128,7 +130,6 @@ function initializeGameObjects(diceMaterial) {
             d.mesh.castShadow = true;
             scene.add(d.mesh);
 
-            // COLLISION LISTENER (Premium Audio/Haptics)
             const onCollide = (e) => {
                 if (gameState !== 'ROLLING' && gameState !== 'SHAKING') return;
                 if (d.body.sleepState === CANNON.Body.SLEEPING) return;
@@ -167,6 +168,7 @@ function initializeGameObjects(diceMaterial) {
 /**
  * WHAT: Player Avatar Setup.
  * WHY: Creates floating spheres and labels to represent players in 3D space.
+ * HOW: Iterates through the player array, calculating a radial position using `sin` and `cos` based on `(index / length) * 2PI`. Generates a `THREE.SphereGeometry` at each coordinate and injects a DOM element into the `ui-container` for the floating name label.
  */
 function setupPlayerPresences() {
     playerMeshes.forEach(p => {
@@ -197,6 +199,7 @@ function setupPlayerPresences() {
 /**
  * WHAT: HUD Synchronization.
  * WHY: Highlights the current roller and neighbors in the 3D scene.
+ * HOW: Updates the `emissive` color and `emissiveIntensity` of player meshes. Uses modulo arithmetic `(turnIdx +/- 1 + length) % length` to identify the 'Left' and 'Right' neighbors relative to the current roller.
  */
 const updateHUD = () => {
     UI.updateHUD(players[turnIdx], threeManIdx === -1 ? null : players[threeManIdx]);
@@ -226,7 +229,7 @@ const updateHUD = () => {
 /**
  * WHAT: Turn Progression (Right-Hand Rotation).
  * WHY: Dead rolls or lost challenges pass the dice to the right.
- * HOW: Increments the turn index and triggers the 'Pass the Phone' flow.
+ * HOW: Increments `turnIdx` with modulo wrap-around. Switches state to `PASSING` and invokes the `UI.showPassPhone` overlay, which requires a manual user acknowledgment before returning to the `READY` state.
  */
 const nextTurn = () => {
     turnIdx = (turnIdx + 1) % players.length;
@@ -284,6 +287,7 @@ document.getElementById('add-player-btn').onclick = () => {
 /**
  * WHAT: The "Toss" Mechanic.
  * WHY: Applies physics impulses to simulate a manual dice throw.
+ * HOW: Sets dice body types to `DYNAMIC`. Calculates a target vector from the player's 3D position toward the center (0,0,0). Applies a primary downward impulse (-15) and a horizontal inward impulse, adding a randomized `spread` to ensure non-deterministic roll outcomes.
  */
 function throwDice() {
     if (gameState !== 'SHAKING') return;
@@ -311,6 +315,7 @@ function throwDice() {
 /**
  * WHAT: Roll Resolver.
  * WHY: Evaluates the outcome, updates stats, and manages turn progression.
+ * HOW: Freezes all physics bodies to `STATIC`. Invokes `getFace()` to determine results via Normal-vector dot-product math. Passes results to `evaluateRules()` and iterates through returned `penalties` to update the `GameStats` engine. Triggers either a state reset (`READY`) or a turn end (`nextTurn`) based on rule hits.
  */
 function resolveRoll() {
     if (dice.length < 2) return;
@@ -329,7 +334,6 @@ function resolveRoll() {
             const res = won ? `${players[turnIdx]} WON! ${players[originalRollerIdx]} DRINKS` : `${players[turnIdx]} FAILED! ${players[turnIdx]} DRINKS`;
             UI.setStatus(`${res}\n${UI.getTrashTalk(won ? 'win' : 'fail')}`);
             
-            // STATS: Record challenge results
             if (won) GameStats.record(players[turnIdx], players[originalRollerIdx], 1);
             else GameStats.record(players[originalRollerIdx], players[turnIdx], 1);
 
@@ -344,7 +348,6 @@ function resolveRoll() {
                 const res = won ? `MATCH! ${players[originalRollerIdx]} DRINKS TWICE!` : `NO MATCH! ${players[challengers[0]]} & ${players[challengers[1]]} DRINK`;
                 UI.setStatus(`${res}\n${UI.getTrashTalk(won ? 'win' : 'fail')}`);
                 
-                // STATS: Record split challenge
                 if (won) GameStats.record(players[turnIdx], players[originalRollerIdx], 2);
                 else { GameStats.record(players[originalRollerIdx], players[challengers[0]], 1); GameStats.record(players[originalRollerIdx], players[challengers[1]], 1); }
 
@@ -358,7 +361,6 @@ function resolveRoll() {
         if (threeManPenalty) UI.setShame(true);
         if (audio && events.some(e => e.includes("SOCIAL"))) audio.playSocial();
         
-        // STATS: Record all rule penalties
         penalties.forEach(p => GameStats.record(players[turnIdx], p.name, p.count));
         
         threeManIdx = newThreeManIdx;
@@ -391,11 +393,16 @@ function resolveRoll() {
     }
 }
 
+/**
+ * WHAT: Sloppy Dice Handler.
+ * WHY: Penalizes players for rolling off the table surface.
+ * HOW: Interrupts the current state, records a self-penalty in `GameStats`, and triggers a long haptic error pattern. Resets dice to the player's 'Hand' position after a 3-second delay.
+ */
 function triggerSloppy() {
     if (gameState === 'SLOPPY') return;
     gameState = 'SLOPPY'; log(" [SYSTEM] SLOPPY TRIGGERED");
     UI.setStatus(`SLOPPY! DRINK 2 & REROLL\n${UI.getTrashTalk('sloppy')}`);
-    GameStats.record(null, players[turnIdx], 2); // Self-penalty
+    GameStats.record(null, players[turnIdx], 2); 
     HapticManager.error();
     safeSetTimeout(() => {
         if (gameState === 'SLOPPY') {
@@ -407,6 +414,11 @@ function triggerSloppy() {
 }
 
 // --- ENGINE LOOP ---
+/**
+ * WHAT: Core Loop.
+ * WHY: Main integration point for all subsystems.
+ * HOW: 1. Advances Cannon world by `1/60s`. 2. Updates cinematic camera position. 3. Physically confines dice within an invisible 'Cup' during SHAKING. 4. Lerps visual meshes to their physical body positions. 5. Monitors velocity to detect "Settle" state via a time-based threshold (>0.8s below 0.1 velocity). 6. Projects player 3D coordinates to 2D screen space for floating labels.
+ */
 function animate() {
     requestAnimationFrame(animate);
     const dt = 1/60; world.step(dt);
