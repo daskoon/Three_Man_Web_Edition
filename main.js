@@ -12,14 +12,14 @@
 
 import * as THREE from 'three';
 import * as CANNON from 'cannon-es';
-import { DirectorAudio } from './audio.js';
-import { HapticManager } from './haptics.js';
-import { GameStats } from './stats.js';
-import { createDieTexture, getFace } from './dice.js';
-import { setupPhysics, createDieBody } from './physics.js';
-import { setupEnvironment, tableHeight } from './environment.js';
-import { updateCamera, setFreeCam, isFreeCam, handleResize } from './camera.js';
-import { evaluateRules } from './rules.js';
+import { DirectorAudio } from './modules/audio.js';
+import { HapticManager } from './modules/haptics.js';
+import { GameStats } from './modules/stats.js';
+import { createDieTexture, getFace } from './modules/dice.js';
+import { setupPhysics, createDieBody } from './modules/physics.js';
+import { setupEnvironment, tableHeight } from './modules/environment.js';
+import { updateCamera, setFreeCam, isFreeCam, handleResize } from './modules/camera.js';
+import { evaluateRules } from './modules/rules.js';
 import { Laws } from './modules/laws.js';
 import { UI } from './ui.js';
 import { log, initLogButton } from './logger.js';

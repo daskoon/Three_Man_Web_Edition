@@ -5,7 +5,7 @@
  * WHO: Principal Architect (Agent) & The Boss (Skoon).
  * WHAT: Manages all HTML overlays, buttons, leaderboard displays, and roll guide visuals.
  * WHY: To isolate DOM manipulation from the 3D physics engine for cleaner code.
- * HOW: Using a static object mapping DOM elements to high-level methods.
+ * HOW: Maintains a static registry of DOM elements via `document.getElementById`. Exposes higher-order methods that manipulate CSS class lists (`.classList.add/remove('hidden')`) and inject dynamic HTML via template strings. Coordinates the 'Snake Eyes' lawmaking interface and the 'Leaderboard' data visualization.
  * WHEN: Triggered by state changes in main.js or user input.
  * WHERE: Injected into the index.html via module scripts.
  */
@@ -42,7 +42,7 @@ export const UI = {
     /**
      * WHAT: News Ticker Updater.
      * WHY: To provide dynamic, scrolling 'CNN-style' feedback.
-     * HOW: Updates the innerText of the ticker element. The CSS animation handles the scrolling.
+     * HOW: Injects a formatted headline string into the `ticker-content` element. Uses CSS `@keyframes` logic to translate the element horizontally across the viewport.
      * @param {string} text - The headline to display.
      */
     updateTicker(text) {
@@ -54,7 +54,7 @@ export const UI = {
     /**
      * WHAT: Stats Screen Controller.
      * WHY: To display the leaderboard and session highlights.
-     * HOW: Toggles visibility and triggers the population logic.
+     * HOW: Invokes `populateStats` to refresh data and then toggles the `hidden` class on the `statsScreen` overlay.
      * @param {boolean} show - Toggle state.
      * @param {object} statsEngine - Reference to GameStats.
      */
@@ -70,7 +70,7 @@ export const UI = {
     /**
      * WHAT: Leaderboard Generator.
      * WHY: To map raw GameStats data into a readable HTML table.
-     * HOW: Iterates through the player leaderboard and rivalry maps.
+     * HOW: Performs an array transformation using `.map()` on the sorted leaderboard data. Dynamically constructs `<tr>` and `<td>` elements with inline styling for the 'Top Rivalry' report based on directed drinking keys.
      */
     populateStats(statsEngine) {
         const board = statsEngine.getLeaderboard();
@@ -96,7 +96,7 @@ export const UI = {
     /**
      * WHAT: Lawmaker UI Controller.
      * WHY: To capture player-created rules during Snake Eyes rolls.
-     * HOW: Displays a 'Mad Libs' style modal with dropdowns.
+     * HOW: Displays the `lawmaker-screen`. Attaches a one-time `onclick` handler to the confirmation button that extracts values from three `<select>` dropdowns and executes the provided callback.
      * @param {function} callback - Called when law is enacted.
      */
     showLawmaker(callback) {
@@ -113,11 +113,10 @@ export const UI = {
     /**
      * WHAT: Player List Renderer.
      * WHY: To show current players during the lobby/setup phase.
-     * HOW: Iterates names and generates HTML. Sanitizes output to prevent XSS.
+     * HOW: Iterates through the `players` array. Implements basic XSS mitigation by replacing `<` and `>` characters with HTML entities before injecting into the DOM.
      */
     renderPlayers(players, removeCallback) {
         this.playerList.innerHTML = players.map((p, k) => {
-            // WHAT: XSS Protection.
             const safeName = p.replace(/</g, "&lt;").replace(/>/g, "&gt;");
             return `
                 <div class='player-entry'>
@@ -135,6 +134,7 @@ export const UI = {
     /**
      * WHAT: HUD Updater.
      * WHY: Keeps the top bars consistent with current game state.
+     * HOW: Directly updates the `innerText` of the badge spans.
      */
     updateHUD(player, threeMan) {
         this.threeMan.innerText = `3MAN: ${threeMan ? threeMan.toUpperCase() : 'NONE'}`;
@@ -144,6 +144,7 @@ export const UI = {
     /**
      * WHAT: Roll Guide Controller.
      * WHY: Persistent reference for all 21 dice combinations.
+     * HOW: Toggles overlay visibility. Lazily populates the guide content on the first invocation to optimize startup performance.
      */
     showGuide(show) {
         if (show) {
@@ -157,7 +158,7 @@ export const UI = {
     /**
      * WHAT: Visual Dice Matrix.
      * WHY: To generate the flat-dice table requested by the Boss.
-     * HOW: Maps rule descriptions to CSS-based dice faces.
+     * HOW: Uses a static array of rule-objects. Iterates and calls `renderDieUI` for each face value. Appends the 'SNAKE EYES RULE LIMITS' footer text via string concatenation.
      */
     populateGuide() {
         if (this.guideBody.innerHTML !== "") return;
@@ -205,6 +206,11 @@ export const UI = {
         `;
     },
 
+    /**
+     * WHAT: CSS Die Renderer.
+     * WHY: To create high-contrast dice faces without image assets.
+     * HOW: Constructs a grid-based `<div>` with `pip` child elements. The `data-val` attribute on the parent triggers specific grid-area mappings in style.css.
+     */
     renderDieUI(val) {
         let pips = "";
         for(let i=0; i<val; i++) pips += '<div class="pip"></div>';
@@ -222,6 +228,7 @@ export const UI = {
     /**
      * WHAT: Challenge Picker.
      * WHY: Allows selection of 1 or 2 targets for Doubles & Troubles.
+     * HOW: Toggles the `drinks-overlay` and populates selection buttons.
      */
     showDoublesChoice(callback) {
         this.drinks.classList.remove('hidden');
@@ -237,21 +244,13 @@ export const UI = {
     /**
      * WHAT: Challenger Selection UI.
      * WHY: Picks 1 or 2 players for the challenge.
-     * HOW: Filters out the current roller to prevent self-challenging.
-     * @param {string} title - Header text for the modal.
-     * @param {Array} players - List of all player names.
-     * @param {number} maxNeeded - How many players to pick.
-     * @param {number} excludedIdx - The index of the roller (to be hidden).
-     * @param {function} callback - Called with [indices] of picked players.
+     * HOW: Filters out the current roller index. Uses `data-idx` attributes to identify selections.
      */
     showPicker(title, players, maxNeeded, excludedIdx, callback) {
         const selected = [];
         this.doublesTitle.innerText = title;
-        
-        // WHAT: Player List Filtering.
-        // WHY: Per Boss request - roller cannot choose themselves.
         this.btns.innerHTML = players.map((p, i) => {
-            if (i === excludedIdx) return ""; // Skip the roller
+            if (i === excludedIdx) return ""; 
             return `<button class="give-btn pick-btn" data-idx="${i}">${p}</button>`;
         }).join('');
         
@@ -277,7 +276,7 @@ export const UI = {
     /**
      * WHAT: Trash Talk Engine.
      * WHY: To provide variety in callouts as requested by Boss.
-     * HOW: Randomly selects from themed phrase arrays.
+     * HOW: Uses `Math.random()` to index into hardcoded phrase arrays.
      */
     getTrashTalk(type) {
         const phrases = {
@@ -293,7 +292,7 @@ export const UI = {
     /**
      * WHAT: Pass the Phone Overlay.
      * WHY: To prevent accidental rolls during Hotseat transitions.
-     * HOW: Uses a dedicated overlay. Forces a button click before unlocking the next turn.
+     * HOW: Activates the `passing-screen` overlay. Blocks all 3D input until the `pass-confirm-btn` is clicked.
      */
     showPassPhone(playerName, callback) {
         this.passingScreen.classList.remove('hidden');

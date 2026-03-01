@@ -7,7 +7,7 @@
  * mathematical detection of which face is pointing "UP" after a roll.
  * WHY: Procedural textures save bandwidth and ensure die faces are perfectly 
  * aligned with the physics body without manual UV mapping.
- * HOW: Using HTML Canvas API for textures and Dot Product math for orientation detection.
+ * HOW: Generates dynamic textures using the HTML5 Canvas API (`2D context`). Detects results by transforming local normal vectors into world-space and calculating their dot-product against the global 'Up' axis (0,1,0).
  * WHEN: Textures generated on init; orientation checked when dice settle.
  * WHERE: Front-end rendering and logic integration.
  */
@@ -17,9 +17,7 @@ import * as THREE from 'three';
 /**
  * WHAT: Procedural Texture Generator.
  * WHY: Creates crisp, high-resolution die faces on the fly without external assets.
- * HOW: Draws circles (pips) on a 2D canvas and converts it to a CanvasTexture.
- * @param {number} number - The face value (1-6).
- * @param {THREE.WebGLRenderer} renderer - Used to calculate max anisotropy.
+ * HOW: Uses `canvas.getContext('2d')` to paint a solid background (`#b22222`) and draw circle paths (`arc`) for pips. Creates a `THREE.CanvasTexture` from the final element and sets `anisotropy` to the hardware maximum to prevent blur during macro camera zooms.
  */
 export function createDieTexture(number, renderer) {
     const canvas = document.createElement('canvas');
@@ -27,12 +25,10 @@ export function createDieTexture(number, renderer) {
     const ctx = canvas.getContext('2d');
     
     // WHAT: Background Fill.
-    // WHY: Deep 'Casino Red' requested by Boss for premium feel.
     ctx.fillStyle = '#b22222';
     ctx.fillRect(0, 0, 256, 256);
     
     // WHAT: Pip Layout Mapping.
-    // WHY: To ensure accurate standard-die pip distribution.
     ctx.fillStyle = '#ffffff';
     const pips = {
         1: [[128, 128]], 2: [[64, 64], [192, 192]], 3: [[64, 64], [128, 128], [192, 192]],
@@ -45,7 +41,6 @@ export function createDieTexture(number, renderer) {
     });
     
     const tex = new THREE.CanvasTexture(canvas);
-    // WHY: Anisotropy keeps textures crisp when viewed at sharp angles during Results zoom.
     if (renderer) tex.anisotropy = renderer.capabilities.getMaxAnisotropy();
     return tex;
 }
@@ -53,9 +48,7 @@ export function createDieTexture(number, renderer) {
 /**
  * WHAT: Result Detector (The "Oracle").
  * WHY: To mathematically identify which number is facing Up.
- * HOW: 1. Rotate 6 standard normals by the die's current rotation.
- *      2. Find the normal most aligned with the global UP vector (0,1,0).
- * @param {THREE.Mesh} mesh - The visual die mesh.
+ * HOW: Maintains an array of 6 unit vectors (Normals) representing each cube face. Multiplies each normal by the mesh's `worldQuaternion` to get its orientation in the scene. Performs a `.dot(globalUp)` calculation; the normal with the highest positive result (closest to 1.0) is facing straight up.
  */
 export function getFace(mesh) {
     const up = new THREE.Vector3(0, 1, 0);
@@ -66,7 +59,6 @@ export function getFace(mesh) {
         new THREE.Vector3(0,0,1), new THREE.Vector3(0,0,-1)
     ];
     // WHAT: Texture Alignment Mapping.
-    // WHY: Maps indices to faces based on the dieMaterials array in main.js.
     const vals = [2, 5, 1, 6, 3, 4];
     
     normals.forEach((n, i) => {

@@ -5,23 +5,17 @@
  * WHO: Principal Architect (Agent) & The Boss (Skoon).
  * WHAT: Evaluates 3D dice faces against the official "Skoon Edition" rulebook.
  * WHY: To provide a central authority for all drinking penalties and state changes.
- * HOW: Maps dice combinations to event strings and penalty metadata.
+ * HOW: Implements a deterministic evaluation function. It receives raw face values (1-6) and compares them against predefined logic blocks (sums, matches, and face-checks). Returns a structured 'Action' object containing events for the HUD and penalty metadata for the Stats engine.
  * WHEN: Triggered every time the dice settle (resolveRoll).
  * WHERE: Logic core used by main.js.
  */
 
-import { Laws } from './modules/laws.js';
+import { Laws } from './laws.js';
 
 /**
  * WHAT: The "Grand Evaluation" of the roll.
  * WHY: To determine who drinks, who moves, and what the HUD says.
- * HOW: Checks core commandments, then delegates custom rule checks to the Laws module.
- * @param {number} v1 - Face of Die 1.
- * @param {number} v2 - Face of Die 2.
- * @param {Array} players - Current active player names.
- * @param {number} turnIdx - Index of the player currently rolling.
- * @param {number} threeManIdx - Index of the current Three Man (or -1).
- * @param {boolean} isVirgin - True if this is the player's first roll of their turn.
+ * HOW: 1. Calculates `total`. 2. Checks for 'Title Change' (1&2). 3. Checks for '3-Man Curse' face matches. 4. Evaluates 'Specials' (Doubles). 5. Evaluates 'Socials' (Any 4). 6. Delegates custom law checks to the `Laws` module. 7. Enforces the 'Virgin Roll' fallback if no other rules hit.
  */
 export function evaluateRules(v1, v2, players, turnIdx, threeManIdx, isVirgin) {
     const total = v1 + v2;
@@ -80,8 +74,6 @@ export function evaluateRules(v1, v2, players, turnIdx, threeManIdx, isVirgin) {
     }
 
     // --- CUSTOM LAWS (MODULAR DELEGATION) ---
-    // WHAT: Externalized Rule Logic.
-    // WHY: To keep rules.js focused on the core game commandments.
     const hits = Laws.evaluate(v1, v2, total, isDoubles);
     hits.forEach(law => {
         triggeredLaws.push(law.label);

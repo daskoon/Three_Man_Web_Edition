@@ -5,7 +5,7 @@
  * WHO: Principal Architect (Agent) & The Boss (Skoon).
  * WHAT: A persistent data store for game metrics (drinks given/received, streaks, and rivalries).
  * WHY: To enable the "Rivalry Concept" where the game tracks who is making whom drink all night.
- * HOW: Using a central object to map player names to stats and a string-key map for rivalries.
+ * HOW: Implements an in-memory database using a JavaScript object. Keys are player names; values are nested objects containing counters for drinks and streaks. Uses string-template keys (e.g., `From->To`) to track directed drinking relationships for the rivalry engine.
  * WHEN: Triggered after every resolved roll where a penalty is identified.
  * WHERE: Imported by main.js; updates data that is then consumed by the UI.
  */
@@ -17,7 +17,7 @@ export const GameStats = {
     /**
      * WHAT: Initialization routine.
      * WHY: To ensure every player has a clean data object before the first roll.
-     * HOW: Iterates through the validated player list and creates zeroed stat blocks.
+     * HOW: Iterates through the validated player list provided during setup and creates zeroed stat blocks using the name as the primary lookup key.
      */
     init(playerNames) {
         playerNames.forEach(name => {
@@ -28,7 +28,7 @@ export const GameStats = {
     /**
      * WHAT: The "Record Keeper" function.
      * WHY: To accurately log the flow of drinks between players.
-     * HOW: Updates 'received' for the drinker and 'given' for the roller. Updates rivalry keys.
+     * HOW: Increments `received` for the target. If an 'aggressor' (from) is identified, it increments their `given` count. If the two are distinct, it generates a unique rivalry key and increments the value. It also manages offensive streaks by incrementing the aggressor's counter and resetting the victim's.
      */
     record(from, to, count = 1) {
         if (!this.players[to]) return;
@@ -39,7 +39,6 @@ export const GameStats = {
         // WHAT: Aggressor Tracking & Rivalries.
         if (from && this.players[from]) {
             // WHAT: Total Chaos Tracking.
-            // WHY: Roller still gets 'credit' for causing self-inflicted drinks.
             this.players[from].given += count;
 
             if (from !== to) {
@@ -48,7 +47,6 @@ export const GameStats = {
                 this.rivalries[key] = (this.rivalries[key] || 0) + count;
 
                 // WHAT: Streak Tracking (Offensive).
-                // WHY: To identify "Rampage" states.
                 this.players[from].currentStreak++;
                 if (this.players[from].currentStreak > this.players[from].maxStreak) {
                     this.players[from].maxStreak = this.players[from].currentStreak;
@@ -56,7 +54,6 @@ export const GameStats = {
             }
 
             // WHAT: Victim Streak Reset.
-            // WHY: You can't be on a rampage if you're the one drinking.
             this.players[to].currentStreak = 0;
         }
     },
@@ -64,6 +61,7 @@ export const GameStats = {
     /**
      * WHAT: Streak Maintenance.
      * WHY: To reset everyone's streak except the person who just hit a rule.
+     * HOW: Iterates the `players` object and zeroes out `currentStreak` for all keys excluding the provided `exceptName`.
      */
     resetStreaks(exceptName) {
         Object.keys(this.players).forEach(name => {
@@ -74,7 +72,7 @@ export const GameStats = {
     /**
      * WHAT: Leaderboard Exporter.
      * WHY: To feed the UI the "Most Fucked Up" list.
-     * HOW: Maps the internal objects to a sorted array based on drinks received.
+     * HOW: Uses `Object.entries` to convert the data store into a flat array. Sorts the array in descending order using the `received` property.
      */
     getLeaderboard() {
         return Object.entries(this.players).map(([name, data]) => ({
@@ -86,7 +84,7 @@ export const GameStats = {
     /**
      * WHAT: Rivalry Reporter.
      * WHY: To highlight the "Beef" of the night.
-     * HOW: Sorts the rivalry map and returns the highest value pair.
+     * HOW: Sorts the `rivalries` key-value pairs by magnitude and returns the top entry as a single-element array.
      */
     getRivalryReport() {
         return Object.entries(this.rivalries)

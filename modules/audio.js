@@ -5,7 +5,7 @@
  * WHO: Principal Architect (Agent) & The Boss (Skoon).
  * WHAT: Manages high-fidelity sample playback, debouncing, and material-specific SFX.
  * WHY: To provide an immersive, tactile soundscape that reacts to physics velocities.
- * HOW: Using Web Audio API with a custom AudioPoolManager for low-latency playback.
+ * HOW: Implements a custom buffer-based playback engine using the Web Audio API. Uses `fetch` and `decodeAudioData` to load local OGG assets into memory. Maps `collision.velocity` from Cannon-es directly to `gain.value` and `detune.value` for physical realism.
  * WHEN: Triggered by collision events in main.js.
  * WHERE: Audio subsystem of the game engine.
  */
@@ -13,7 +13,7 @@
 /**
  * WHAT: Sample Resource Manager.
  * WHY: To handle loading, decoding, and randomized playback of audio buffers.
- * HOW: Stores decoded AudioBuffers in a Map; handles per-ID debouncing.
+ * HOW: Maintains a `Map` of decoded `AudioBuffers`. Uses a per-ID `lastPlayTime` registry to enforce a `debounceMs` cooldown, preventing overlapping audio peaks that cause digital clipping.
  */
 class AudioPoolManager {
     constructor(ctx) {
@@ -26,6 +26,7 @@ class AudioPoolManager {
     /**
      * WHAT: Asset Loader.
      * WHY: To asynchronously fetch and decode OGG/MP3 files into memory.
+     * HOW: Uses the Fetch API to retrieve binary data, converts to `arrayBuffer`, and invokes the hardware-accelerated `decodeAudioData` on the AudioContext.
      */
     async loadSample(name, url) {
         if (!this.ctx) return;
@@ -43,7 +44,7 @@ class AudioPoolManager {
     /**
      * WHAT: Trigger Function.
      * WHY: To play a specific sample with dynamic randomization.
-     * HOW: Creates a BufferSource, applies detune/gain, and connects to destination.
+     * HOW: Creates an ephemeral `AudioBufferSourceNode` and `GainNode`. Randomizes the `detune` property (pitch) by +/- 100 cents to ensure every "clack" sounds distinct. Connects the source through the gain stage to the master `destination`.
      */
     play(name, options = {}) {
         if (!this.ctx || !this.samples.has(name)) return;
@@ -53,7 +54,6 @@ class AudioPoolManager {
         const lastTime = this.lastPlayTime.get(debounceId) || 0;
 
         // WHAT: Per-Object Debouncing.
-        // WHY: Allows multiple dice to sound simultaneously without one muting the other.
         if (now - lastTime < this.debounceMs) return;
         this.lastPlayTime.set(debounceId, now);
 
@@ -64,7 +64,6 @@ class AudioPoolManager {
         source.buffer = buffer;
 
         // WHAT: Dynamic Pitch Jitter.
-        // WHY: Prevents repetitive "robotic" sounds.
         const baseDetune = options.detune || 0;
         const jitter = (Math.random() - 0.5) * 200; 
         source.detune.value = baseDetune + jitter;
@@ -82,6 +81,7 @@ class AudioPoolManager {
 /**
  * WHAT: High-Level Audio Controller.
  * WHY: Provides a clean API for the main game loop to trigger material-based sounds.
+ * HOW: Encapsulates the `AudioPoolManager`. Exposes semantic methods (`playFelt`, `playWood`) that preset the appropriate `detune` and `volume` parameters for specific collision types.
  */
 export class DirectorAudio {
     constructor() {
@@ -90,7 +90,6 @@ export class DirectorAudio {
             this.pool = new AudioPoolManager(this.ctx);
             
             // WHAT: Local Asset Mapping.
-            // WHY: To avoid CORS issues and ensure fast loading from the same domain.
             this.urls = {
                 CLACK: "assets/audio/wood_clack.ogg",
                 THUD: "assets/audio/roll_impact.ogg"
@@ -104,6 +103,7 @@ export class DirectorAudio {
     /**
      * WHAT: Audio Context Unlock.
      * WHY: Browsers block audio until an explicit user interaction (The PLAY button).
+     * HOW: Executes `this.ctx.resume()` and then triggers the asynchronous pre-fetching of all OGG samples via `this.pool.loadSample`.
      */
     async resume() {
         if (this.ctx && this.ctx.state === 'suspended') {
@@ -123,7 +123,6 @@ export class DirectorAudio {
 
     /**
      * WHAT: Table "Felt" Impact.
-     * WHY: To provide a muffled, heavy thud sound.
      */
     playFelt(velocity, id = 0) {
         if (!this.pool) return;
@@ -133,7 +132,6 @@ export class DirectorAudio {
 
     /**
      * WHAT: Rail "Wood" Impact.
-     * WHY: To provide a sharp, bright clack sound.
      */
     playWood(velocity, id = 0) {
         if (!this.pool) return;
@@ -153,6 +151,7 @@ export class DirectorAudio {
     /**
      * WHAT: SOCIAL! UI Tone.
      * WHY: Unique synthesized sound for the "Everyone Drinks" rule.
+     * HOW: Creates an ephemeral `OscillatorNode` with a `sawtooth` waveform. Automates the `frequency` ramp over 0.5 seconds to create a distinct UI 'buzz' effect.
      */
     playSocial() {
         if (!this.ctx) return;

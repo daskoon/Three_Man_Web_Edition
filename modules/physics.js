@@ -7,7 +7,7 @@
  * and defines the physical bodies for the dice and the table environment.
  * WHY: Separation of physics from rendering ensures stable simulation and 
  * allows for high-precision sub-stepping independent of frame rate.
- * HOW: Using Cannon-es rigid body dynamics with specific Material properties.
+ * HOW: Initializes a `CANNON.World` with high-velocity resolution. Maps rigid bodies to meshes using a 1:1 coordinate system. Implements `ContactMaterial` overrides to define precise friction/bounciness ratios for specific object pairs (e.g. Dice-on-Dice vs Dice-on-Table).
  * WHEN: Initialized on application start; stepped in every frame of the animate loop.
  * WHERE: Logic core for physical interactions within the WebGL scene.
  */
@@ -17,7 +17,7 @@ import * as CANNON from 'cannon-es';
 /**
  * WHAT: World Setup Function.
  * WHY: To create the physical 'reality' where the dice exist.
- * HOW: Configures gravity, contact materials, and the infinite table plane.
+ * HOW: 1. Configures global gravity vector. 2. Sets `allowSleep` to true for CPU efficiency. 3. Configures default contact material properties. 4. Generates a static `CANNON.Plane` for the table surface and 32 `CANNON.Box` segments for the circular rails.
  */
 export function setupPhysics() {
     const world = new CANNON.World();
@@ -27,17 +27,15 @@ export function setupPhysics() {
     world.gravity.set(0, -40, 0); 
     
     // WHAT: Physics Sleeping Optimization.
-    // WHY: To save CPU/Battery by not simulating stationary objects.
     world.allowSleep = true;
 
     // WHAT: Default Contact Material.
-    // WHY: Defines how objects bounce/slide by default.
     world.defaultContactMaterial.friction = 0.4;
     world.defaultContactMaterial.restitution = 0.55;
 
     // WHAT: Table "Floor" (Infinite Collision Plane).
-    // WHY: Catches the dice at table height (y=4.0) to prevent them falling infinitely.
-    // HOW: Rotates a static Plane 90 degrees to face 'Up'.
+    // WHY: Catches the dice at table height (y=4.0).
+    // HOW: Transforms a local `CANNON.Plane` by a -90 degree X-axis rotation using a `CANNON.Quaternion` to align it with the horizontal grid.
     const groundBody = new CANNON.Body({ mass: 0 });
     const groundShape = new CANNON.Plane();
     const quat = new CANNON.Quaternion();
@@ -47,8 +45,8 @@ export function setupPhysics() {
     world.addBody(groundBody);
 
     // WHAT: Circular Collision Rails (The "Cage").
-    // WHY: Prevents dice from leaving the play area under normal velocity.
-    // HOW: Uses 32 segmented boxes arranged in a circle.
+    // WHY: Prevents dice from leaving the table.
+    // HOW: Distributes 32 static box colliders in a circle of radius 6.8. Each box is rotated around the Y-axis to face the center using `setFromAxisAngle`.
     const numRails = 32;
     const railRadius = 6.8;
     const RAIL_HEIGHT = 0.5; 
@@ -68,7 +66,7 @@ export function setupPhysics() {
 
     // WHAT: Dice Material System.
     // WHY: To define specific "Dice-on-Dice" interaction properties (clipping fix).
-    // HOW: Assigns a unique ID to die bodies and a specific ContactMaterial rule.
+    // HOW: Creates a custom `CANNON.Material`. Defines a `ContactMaterial` with a high `contactEquationStiffness` (1e6) to ensure dice bounce off each other physically rather than overlapping.
     const diceMaterial = new CANNON.Material('dice');
     const diceContactMaterial = new CANNON.ContactMaterial(diceMaterial, diceMaterial, {
         friction: 0.3,
@@ -84,6 +82,7 @@ export function setupPhysics() {
 /**
  * WHAT: Die Body Factory.
  * WHY: To create standardized cube colliders for every die in the pool.
+ * HOW: Instantiates a `CANNON.Body` with `mass = 0` (Static) by default. Assigns a `CANNON.Box` shape with half-extents matching the 19mm visual scale.
  * @param {number} x - The starting X coordinate.
  * @param {CANNON.World} world - The physics world to add the body to.
  * @param {CANNON.Material} diceMaterial - The material definition.

@@ -5,7 +5,7 @@
  * WHO: Principal Architect (Agent) & The Boss (Skoon).
  * WHAT: Constructs the 3D scene including the table, basement room, lighting, and dice cup.
  * WHY: To provide a consistent visual context for the physics engine and game loop.
- * HOW: Using Three.js primitives (Cylinder, Plane, Box) with StandardMaterials.
+ * HOW: Instantiates standard Three.js meshes (`THREE.Mesh`) using primitives like `CylinderGeometry` and `PlaneGeometry`. Maps textures loaded via `THREE.TextureLoader`. Configures a `THREE.SpotLight` with `castShadow = true` to enable real-time shadow mapping on the table surface.
  * WHEN: Initialized once at application startup.
  * WHERE: Front-end rendering engine.
  */
@@ -17,7 +17,7 @@ export const tableHeight = 4.0;
 /**
  * WHAT: Master Scene Constructor.
  * WHY: To build the 'World' from the baseline up.
- * HOW: Loads textures and instantiates meshes for the room, table, and props.
+ * HOW: Sequentially adds meshes to the `scene` object. Uses `Math.PI` rotations to orient walls and floors. Sets `material.transparent = true` for the red feedback floors to allow the underlying felt and hardwood textures to show through.
  */
 export function setupEnvironment(scene) {
     const loader = new THREE.TextureLoader();
@@ -31,7 +31,6 @@ export function setupEnvironment(scene) {
     // --- BASEMENT ENVIRONMENT ---
     
     // WHAT: Red Room Floor.
-    // WHY: Requested by Boss for visual confirmation of the baseline.
     const roomFloor = new THREE.Mesh(
         new THREE.PlaneGeometry(40, 40),
         new THREE.MeshStandardMaterial({ color: 0xff0000, transparent: true, opacity: 0.3, roughness: 0.6 })
@@ -41,7 +40,6 @@ export function setupEnvironment(scene) {
     scene.add(roomFloor);
 
     // WHAT: Red Table Surface.
-    // WHY: To catch visual sinking and provide depth under the felt.
     const tableFloor = new THREE.Mesh(
         new THREE.PlaneGeometry(20, 20),
         new THREE.MeshStandardMaterial({ color: 0xff0000, transparent: true, opacity: 0.5 })
@@ -74,7 +72,6 @@ export function setupEnvironment(scene) {
     // --- TABLE GEOMETRY ---
 
     // WHAT: Visual Table Top (Felt).
-    // WHY: The primary interaction surface.
     const tableTop = new THREE.Mesh(
         new THREE.CylinderGeometry(7, 7, 0.5, 64),
         new THREE.MeshStandardMaterial({ map: feltTex, roughness: 0.8 })
@@ -94,7 +91,6 @@ export function setupEnvironment(scene) {
     createLeg(4, 4); createLeg(-4, 4); createLeg(4, -4); createLeg(-4, -4);
 
     // WHAT: Visual Rim (Gold/Wood).
-    // WHY: To provide a visual boundary for the play area.
     const rim = new THREE.Mesh(
         new THREE.CylinderGeometry(7.2, 7.2, 0.5, 64, 1, true),
         new THREE.MeshStandardMaterial({
@@ -110,7 +106,6 @@ export function setupEnvironment(scene) {
     scene.add(rim);
 
     // WHAT: Collision Cage Helper.
-    // WHY: Visual aid for checking physics rail alignment.
     const debugRailMat = new THREE.MeshBasicMaterial({ color: 0xffd700, transparent: true, opacity: 0.3, wireframe: true });
     const numRails = 32;
     const railRadius = 6.8;
@@ -126,7 +121,6 @@ export function setupEnvironment(scene) {
     // --- PROPS ---
 
     // WHAT: Visual Dice Cup.
-    // WHY: Physically confines dice for clacking; Hidden by Boss request.
     const cup = new THREE.Mesh(
         new THREE.CylinderGeometry(1.2, 1.0, 2.5, 32, 1, true),
         new THREE.MeshStandardMaterial({ color: 0x3d2b1f, roughness: 0.9, metalness: 0.1, side: THREE.DoubleSide })
