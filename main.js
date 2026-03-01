@@ -114,7 +114,7 @@ function initializeGameObjects() {
 
             // COLLISION LISTENER (Premium Audio/Haptics)
             d.body.addEventListener('collide', (e) => {
-                if (gameState !== 'ROLLING') return;
+                if (gameState !== 'ROLLING' && gameState !== 'SHAKING') return;
                 
                 const velocity = e.contact.getImpactVelocityAlongNormal();
                 if (velocity < 0.5) return; // Ignore micro-jitters
@@ -372,12 +372,22 @@ function animate() {
             frameCount++;
         }
 
+        const cup = scene.getObjectByName("diceCup");
+        if (cup) {
+            if (gameState === 'SHAKING') {
+                const pMesh = playerMeshes[turnIdx].mesh;
+                cup.visible = true;
+                cup.position.set(pMesh.position.x * 0.5, tableHeight + 4, pMesh.position.z * 0.5);
+                cup.rotation.x = Math.PI; // Upside down
+            } else {
+                cup.visible = false;
+            }
+        }
+
         dice.forEach((d, i) => {
-            if (gameState === 'READY' || (gameState === 'CHALLENGE_READY' && challengeType === 'SPLIT' && i > diceRolledCount)) {
+            if (gameState === 'READY' || (gameState === 'CHALLENGE_READY' && challengeType === 'SPLIT' && i >= diceRolledCount)) {
                 const pMesh = playerMeshes[turnIdx].mesh;
                 const angle = playerMeshes[turnIdx].angle;
-                // Side-by-side relative to player's view (tangent to the circle)
-                // Tangent vector to (sin(a), cos(a)) is (cos(a), -sin(a))
                 const offsetX = Math.cos(angle) * (i === 0 ? -0.8 : 0.8);
                 const offsetZ = -Math.sin(angle) * (i === 0 ? -0.8 : 0.8);
                 const hoverPos = new THREE.Vector3(pMesh.position.x * 0.5 + offsetX, tableHeight + 4, pMesh.position.z * 0.5 + offsetZ);
@@ -387,6 +397,26 @@ function animate() {
                     d.mesh.scale.lerp(new THREE.Vector3(4, 4, 4), lerpFactor);
                     d.mesh.rotation.y += 0.01;
                     d.body.position.set(d.mesh.position.x, d.mesh.position.y, d.mesh.position.z);
+                    d.body.type = CANNON.Body.STATIC;
+                }
+            } else if (gameState === 'SHAKING') {
+                const pMesh = playerMeshes[turnIdx].mesh;
+                // Trap dice inside cup
+                if (!isFreeCam) {
+                    d.body.type = CANNON.Body.DYNAMIC;
+                    d.body.mass = 1.0;
+                    d.body.updateMassProperties();
+                    
+                    // Jitter dice inside cup to cause collisions/clacks
+                    const jitter = 0.5;
+                    d.body.position.x = pMesh.position.x * 0.5 + (Math.random()-0.5) * jitter;
+                    d.body.position.z = pMesh.position.z * 0.5 + (Math.random()-0.5) * jitter;
+                    d.body.position.y = tableHeight + 4 + (Math.random()-0.5) * jitter;
+                    
+                    d.mesh.position.copy(d.body.position);
+                    d.mesh.quaternion.copy(d.body.quaternion);
+                    // Shrink visually while in cup
+                    d.mesh.scale.lerp(new THREE.Vector3(1, 1, 1), lerpFactor);
                 }
             } else {
                 if (!isFreeCam) {

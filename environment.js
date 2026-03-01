@@ -101,6 +101,15 @@ export function setupEnvironment(scene) {
         scene.add(mesh);
     }
 
+    // Visual Dice Cup (Leather-like)
+    const cup = new THREE.Mesh(
+        new THREE.CylinderGeometry(1.2, 1.0, 2.5, 32, 1, true),
+        new THREE.MeshStandardMaterial({ color: 0x3d2b1f, roughness: 0.9, metalness: 0.1, side: THREE.DoubleSide })
+    );
+    cup.name = "diceCup";
+    cup.visible = false; // Hidden by default, only shown in SHAKING
+    scene.add(cup);
+
     // Lights
     scene.add(new THREE.AmbientLight(0xffffff, 0.5));
     const spot = new THREE.SpotLight(0xffd700, 3.0);
