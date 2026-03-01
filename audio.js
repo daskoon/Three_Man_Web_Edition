@@ -11,7 +11,7 @@ class AudioPoolManager {
         this.ctx = ctx;
         this.samples = new Map();
         this.lastPlayTime = new Map();
-        this.debounceMs = 50; // Prevention of "Machine Gun" effect
+        this.debounceMs = 20; // Lowered for more responsive rattling
     }
 
     async loadSample(name, url) {
@@ -21,7 +21,7 @@ class AudioPoolManager {
             const arrayBuffer = await response.arrayBuffer();
             const audioBuffer = await this.ctx.decodeAudioData(arrayBuffer);
             this.samples.set(name, audioBuffer);
-            console.log(`[AudioPool] Loaded: ${name}`);
+            console.log(`[AudioPool] Loaded: ${name} from ${url}`);
         } catch (e) {
             console.error(`[AudioPool] Failed to load ${name}:`, e.message);
         }
@@ -65,10 +65,10 @@ export class DirectorAudio {
             this.ctx = new (window.AudioContext || window.webkitAudioContext)();
             this.pool = new AudioPoolManager(this.ctx);
             
-            // CDN Assets (Kenney.nl Public Domain)
+            // Local Assets (Served from the same domain to avoid CORS)
             this.urls = {
-                CLACK: "https://gamesounds.xyz/Kenney's%20Sound%20Pack/Casino%20Audio/diceThrow1.ogg",
-                THUD: "https://gamesounds.xyz/Kenney's%20Sound%20Pack/Casino%20Audio/diceThrow2.ogg"
+                CLACK: "assets/audio/wood_clack.ogg",
+                THUD: "assets/audio/roll_impact.ogg"
             };
         } catch (e) {
             console.warn("AudioContext not supported:", e.message);
