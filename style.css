@@ -192,6 +192,29 @@ button:active { transform: scale(0.96); }
     text-align: left;
 }
 
+/* --- LAWMAKER MODAL --- */
+.law-row {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    margin: 15px 0;
+    font-size: 1.1rem;
+    color: white;
+}
+
+.law-row select {
+    background: #222;
+    color: var(--gold);
+    border: 1px solid var(--gold);
+    padding: 8px;
+    border-radius: 4px;
+    font-family: inherit;
+    font-size: 1rem;
+    cursor: pointer;
+    max-width: 200px;
+}
+
 /* --- FLAT DICE VISUALS (CSS) --- */
 .dice-pair-ui {
     display: flex;

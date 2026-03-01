@@ -29,6 +29,28 @@ export const UI = {
     passingScreen: document.getElementById('passing-screen'),
     passingInfo: document.getElementById('passing-player-info'),
     passConfirmBtn: document.getElementById('pass-confirm-btn'),
+    lawmakerScreen: document.getElementById('lawmaker-screen'),
+    lawTrigger: document.getElementById('law-trigger'),
+    lawTarget: document.getElementById('law-target'),
+    lawAction: document.getElementById('law-action'),
+    confirmLawBtn: document.getElementById('confirm-law-btn'),
+
+    /**
+     * WHAT: Lawmaker UI Controller.
+     * WHY: To capture player-created rules during Snake Eyes rolls.
+     * HOW: Displays a 'Mad Libs' style modal with dropdowns.
+     * @param {function} callback - Called when law is enacted.
+     */
+    showLawmaker(callback) {
+        this.lawmakerScreen.classList.remove('hidden');
+        this.confirmLawBtn.onclick = () => {
+            const trigger = this.lawTrigger.value;
+            const target = this.lawTarget.value;
+            const action = this.lawAction.value;
+            this.lawmakerScreen.classList.add('hidden');
+            callback(trigger, target, action);
+        };
+    },
 
     /**
      * WHAT: Player List Renderer.

@@ -97,6 +97,43 @@
                 <div id="recipient-buttons" class="button-grid"></div>
             </div>
         </div>
+
+        <div id="lawmaker-screen" class="overlay hidden">
+            <div class="modal">
+                <h2 style="color:var(--gold)">DECLARE A NEW LAW</h2>
+                <div class="law-row">
+                    <span>Whenever</span>
+                    <select id="law-trigger">
+                        <option value="sum_5">Sum is 5</option>
+                        <option value="sum_8">Sum is 8</option>
+                        <option value="sum_9">Sum is 9</option>
+                        <option value="sum_10">Sum is 10</option>
+                        <option value="any_5">Any 5 appears</option>
+                        <option value="any_6">Any 6 appears</option>
+                        <option value="doubles">Any Doubles</option>
+                    </select>
+                </div>
+                <div class="law-row">
+                    <select id="law-target">
+                        <option value="roller">The Roller</option>
+                        <option value="everyone">Everyone</option>
+                        <option value="left">Left Neighbor</option>
+                        <option value="right">Right Neighbor</option>
+                        <option value="threeman">The 3-Man</option>
+                    </select>
+                    <span>must</span>
+                </div>
+                <div class="law-row">
+                    <select id="law-action">
+                        <option value="drink_1">Drink 1</option>
+                        <option value="drink_2">Drink 2</option>
+                        <option value="thumb">Put Thumb Down (Last Drinks)</option>
+                        <option value="nose">Touch Nose (Last Drinks)</option>
+                    </select>
+                </div>
+                <button id="confirm-law-btn" class="primary-btn" style="margin-top:20px;">ENACT LAW</button>
+            </div>
+        </div>
     </div>
 
     <canvas id="game-canvas"></canvas>

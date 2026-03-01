@@ -19,7 +19,7 @@ import { createDieTexture, getFace } from './dice.js';
 import { setupPhysics, createDieBody } from './physics.js';
 import { setupEnvironment, tableHeight } from './environment.js';
 import { updateCamera, setFreeCam, isFreeCam, handleResize } from './camera.js';
-import { evaluateRules } from './rules.js';
+import { evaluateRules, addCustomRule } from './rules.js';
 import { UI } from './ui.js';
 import { log, initLogButton } from './logger.js';
 
@@ -375,22 +375,21 @@ function resolveRoll() {
         UI.setStatus(statusStr); 
         updateHUD(); isVirgin = false;
 
-        if (isDoubles) {
-            gameState = 'DECIDING';
-            UI.showDoublesChoice((type) => {
-                challengeType = type; originalRollerIdx = turnIdx;
-                if (type === 'SINGLE') {
-                    UI.showPicker("PICK ONE CHALLENGER", players, 1, turnIdx, (picked) => {
-                        challengers = picked; turnIdx = picked[0];
-                        gameState = 'CHALLENGE_READY'; UI.setStatus(`${players[turnIdx].toUpperCase()}\nSHAKE TO CHALLENGE`);
-                    });
-                } else {
-                    UI.showPicker("PICK TWO CHALLENGERS", players, 2, turnIdx, (picked) => {
-                        challengers = picked; turnIdx = picked[0]; diceRolledCount = 0;
-                        gameState = 'CHALLENGE_READY'; UI.setStatus(`${players[turnIdx].toUpperCase()}\nROLL DIE 1`);
-                    });
-                }
+        // WHAT: Snake Eyes Lawmaking Trigger.
+        // WHY: Per Boss request - allows creation of Mad-Libs style custom rules.
+        if (v1 === 1 && v2 === 1) {
+            gameState = 'LAWMAKING';
+            UI.showLawmaker((trigger, target, action) => {
+                addCustomRule(trigger, target, action);
+                log(`[LAW] New rule enacted: ${trigger} -> ${target} -> ${action}`);
+                gameState = 'DECIDING';
+                triggerDoublesFlow(); // Continue to challenge after lawmaking
             });
+            return;
+        }
+
+        if (isDoubles) {
+            triggerDoublesFlow();
         } else if (events.length > 0) { 
             safeSetTimeout(() => { gameState = 'READY'; UI.setStatus("ROLL AGAIN"); }, 3000);
         } else { 
@@ -398,6 +397,28 @@ function resolveRoll() {
             safeSetTimeout(nextTurn, 5000); 
         }
     }
+}
+
+/**
+ * WHAT: Doubles Challenge Initiation.
+ * WHY: Modularized to be called after Rulemaking or immediately after a double.
+ */
+function triggerDoublesFlow() {
+    gameState = 'DECIDING';
+    UI.showDoublesChoice((type) => {
+        challengeType = type; originalRollerIdx = turnIdx;
+        if (type === 'SINGLE') {
+            UI.showPicker("PICK ONE CHALLENGER", players, 1, turnIdx, (picked) => {
+                challengers = picked; turnIdx = picked[0];
+                gameState = 'CHALLENGE_READY'; UI.setStatus(`${players[turnIdx].toUpperCase()}\nSHAKE TO CHALLENGE`);
+            });
+        } else {
+            UI.showPicker("PICK TWO CHALLENGERS", players, 2, turnIdx, (picked) => {
+                challengers = picked; turnIdx = picked[0]; diceRolledCount = 0;
+                gameState = 'CHALLENGE_READY'; UI.setStatus(`${players[turnIdx].toUpperCase()}\nROLL DIE 1`);
+            });
+        }
+    });
 }
 
 /**
