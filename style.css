@@ -102,7 +102,49 @@ button:active { transform: scale(0.96); }
 
 .button-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 20px; }
 .hidden { display: none !important; opacity: 0; }
-#top-hud { position: absolute; top: 40px; width: 100%; display: flex; justify-content: space-around; pointer-events: none; z-index: 100; }
+#top-hud {
+    position: fixed;
+    top: 0; left: 0; width: 100%;
+    z-index: 100;
+    pointer-events: none;
+    display: flex;
+    flex-direction: column;
+}
+
+#badge-row {
+    display: flex;
+    justify-content: space-around;
+    padding: 10px;
+    width: 100%;
+    box-sizing: border-box;
+}
+
+/* --- NEWS TICKER (CNN STYLE) --- */
+#ticker-wrap {
+    width: 100%;
+    background: #b22222; /* Casino Red */
+    border-bottom: 2px solid var(--gold);
+    color: white;
+    font-weight: 900;
+    font-size: 0.8rem;
+    overflow: hidden;
+    white-space: nowrap;
+    padding: 4px 0;
+    box-shadow: 0 4px 10px rgba(0,0,0,0.5);
+}
+
+#ticker-content {
+    display: inline-block;
+    padding-left: 100%;
+    animation: scroll-left 30s linear infinite;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+}
+
+@keyframes scroll-left {
+    0% { transform: translateX(0); }
+    100% { transform: translateX(-100%); }
+}
 #bottom-hud { position: absolute; bottom: 10vh; width: 100%; text-align: center; pointer-events: none; }
 #current-3man { color: var(--gold); }
 

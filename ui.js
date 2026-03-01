@@ -37,6 +37,19 @@ export const UI = {
     statsScreen: document.getElementById('stats-screen'),
     statsBody: document.getElementById('stats-body'),
     rivalryReport: document.getElementById('rivalry-report'),
+    ticker: document.getElementById('ticker-content'),
+
+    /**
+     * WHAT: News Ticker Updater.
+     * WHY: To provide dynamic, scrolling 'CNN-style' feedback.
+     * HOW: Updates the innerText of the ticker element. The CSS animation handles the scrolling.
+     * @param {string} text - The headline to display.
+     */
+    updateTicker(text) {
+        if (this.ticker) {
+            this.ticker.innerText = text.toUpperCase();
+        }
+    },
 
     /**
      * WHAT: Stats Screen Controller.

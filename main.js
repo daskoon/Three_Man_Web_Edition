@@ -382,6 +382,22 @@ function resolveRoll() {
         UI.setStatus(statusStr); 
         updateHUD(); isVirgin = false;
 
+        // WHAT: News Ticker Headline Generation.
+        // WHY: To provide the 'CNN-style' barker requested by Boss.
+        // HOW: Transforms the multi-line HUD status into a single-line marquee string.
+        let tickerMsg = statusStr.replace(/\n/g, ' | ');
+        if (penalties.length > 0) {
+            const totalDrinks = penalties.reduce((sum, p) => sum + p.count, 0);
+            tickerMsg += ` | LATEST CHAOS: ${totalDrinks} DRINKS DISTRIBUTED`;
+        }
+        const rivalry = GameStats.getRivalryReport();
+        if (rivalry.length > 0) {
+            const [key, count] = rivalry[0];
+            const [from, to] = key.split('->');
+            tickerMsg += ` | TOP BEEF: ${from.toUpperCase()} VS ${to.toUpperCase()} (${count} DRINKS)`;
+        }
+        UI.updateTicker(tickerMsg);
+
         // WHAT: Snake Eyes Lawmaking Trigger.
         // WHY: Per Boss request - allows creation of Mad-Libs style custom rules.
         if (v1 === 1 && v2 === 1) {
