@@ -34,6 +34,51 @@ export const UI = {
     lawTarget: document.getElementById('law-target'),
     lawAction: document.getElementById('law-action'),
     confirmLawBtn: document.getElementById('confirm-law-btn'),
+    statsScreen: document.getElementById('stats-screen'),
+    statsBody: document.getElementById('stats-body'),
+    rivalryReport: document.getElementById('rivalry-report'),
+
+    /**
+     * WHAT: Stats Screen Controller.
+     * WHY: To display the leaderboard and session highlights.
+     * HOW: Toggles visibility and triggers the population logic.
+     * @param {boolean} show - Toggle state.
+     * @param {object} statsEngine - Reference to GameStats.
+     */
+    showStats(show, statsEngine) {
+        if (show) {
+            this.populateStats(statsEngine);
+            this.statsScreen.classList.remove('hidden');
+        } else {
+            this.statsScreen.classList.add('hidden');
+        }
+    },
+
+    /**
+     * WHAT: Leaderboard Generator.
+     * WHY: To map raw GameStats data into a readable HTML table.
+     * HOW: Iterates through the player leaderboard and rivalry maps.
+     */
+    populateStats(statsEngine) {
+        const board = statsEngine.getLeaderboard();
+        this.statsBody.innerHTML = board.map(p => `
+            <tr>
+                <td style="color:var(--gold); font-weight:bold;">${p.name.toUpperCase()}</td>
+                <td>${p.received}</td>
+                <td>${p.given}</td>
+                <td>${p.maxStreak}</td>
+            </tr>
+        `).join('');
+
+        const rivalry = statsEngine.getRivalryReport();
+        if (rivalry.length > 0) {
+            const [key, count] = rivalry[0];
+            const [from, to] = key.split('->');
+            this.rivalryReport.innerHTML = `<strong>TOP RIVALRY:</strong><br>${from.toUpperCase()} has absolutely destroyed ${to.toUpperCase()} with ${count} drinks!`;
+        } else {
+            this.rivalryReport.innerHTML = "<strong>TOP RIVALRY:</strong><br>No beef identified yet. Keep rolling.";
+        }
+    },
 
     /**
      * WHAT: Lawmaker UI Controller.

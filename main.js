@@ -533,6 +533,9 @@ window.addEventListener('resize', () => handleResize(camera, renderer));
 document.getElementById('guide-btn').onclick = () => UI.showGuide(true);
 document.getElementById('close-guide-btn').onclick = () => UI.showGuide(false);
 
+document.getElementById('stats-btn').onclick = () => UI.showStats(true, GameStats);
+document.getElementById('close-stats-btn').onclick = () => UI.showStats(false);
+
 window.addEventListener('devicemotion', (e) => {
     if (gameState !== 'READY' && gameState !== 'SHAKING' && gameState !== 'CHALLENGE_READY') return;
     const { x, y, z } = e.accelerationIncludingGravity;

@@ -65,6 +65,7 @@
             <div id="hud-buttons">
                 <button id="freecam-btn" class="hud-btn">FREE CAM: OFF</button>
                 <button id="guide-btn" class="hud-btn">ROLL GUIDE</button>
+                <button id="stats-btn" class="hud-btn">LEADERBOARD</button>
                 <a href="rulebook.pdf" target="_blank" id="rulebook-btn" class="hud-btn">OFFICIAL RULES (PDF)</a>
                 <button id="download-logs-btn" class="hud-btn">DOWNLOAD LOGS</button>
             </div>
@@ -136,6 +137,31 @@
                     </select>
                 </div>
                 <button id="confirm-law-btn" class="primary-btn" style="margin-top:20px;">ENACT LAW</button>
+            </div>
+        </div>
+
+        <div id="stats-screen" class="overlay hidden">
+            <div class="modal large-modal">
+                <h2 style="color:var(--gold)">LEADERBOARD</h2>
+                <div id="stats-content">
+                    <table class="guide-table">
+                        <thead>
+                            <tr>
+                                <th>Player</th>
+                                <th>Drank</th>
+                                <th>Caused</th>
+                                <th>Max Streak</th>
+                            </tr>
+                        </thead>
+                        <tbody id="stats-body">
+                            <!-- Populated by JS -->
+                        </tbody>
+                    </table>
+                    <div id="rivalry-report" style="color:#ccc; font-size: 0.8rem; margin-top: 20px; border-top: 1px solid #444; padding-top: 15px;">
+                        <!-- Top Rivalry shows here -->
+                    </div>
+                </div>
+                <button id="close-stats-btn" class="secondary-btn" style="margin-top:20px;">BACK TO GAME</button>
             </div>
         </div>
     </div>
