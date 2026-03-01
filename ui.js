@@ -17,6 +17,63 @@ export const UI = {
     playerList: document.getElementById('player-list'),
     playerInput: document.getElementById('player-input'),
     logBtn: document.getElementById('download-logs-btn'),
+    guide: document.getElementById('guide-screen'),
+    guideBody: document.getElementById('guide-body'),
+
+    showGuide(show) {
+        if (show) {
+            this.populateGuide();
+            this.guide.classList.remove('hidden');
+        } else {
+            this.guide.classList.add('hidden');
+        }
+    },
+
+    populateGuide() {
+        if (this.guideBody.innerHTML !== "") return; // Already populated
+
+        const combinations = [
+            { v1: 1, v2: 1, desc: "SNAKE EYES! Make a rule & Challenge." },
+            { v1: 1, v2: 2, desc: "NEW THREE MAN! No one drinks." },
+            { v1: 1, v2: 3, desc: "3-Man drinks 1 | SOCIAL (Everyone drinks)." },
+            { v1: 1, v2: 4, desc: "SOCIAL! Everyone drinks." },
+            { v1: 1, v2: 5, desc: "Dead Roll. Turn Ends." },
+            { v1: 1, v2: 6, desc: "Left neighbor drinks." },
+            { v1: 2, v2: 2, desc: "SOCIAL | Challenge." },
+            { v1: 2, v2: 3, desc: "3-Man drinks 1." },
+            { v1: 2, v2: 4, desc: "SOCIAL! Everyone drinks." },
+            { v1: 2, v2: 5, desc: "Left neighbor drinks." },
+            { v1: 2, v2: 6, desc: "Dead Roll. Turn Ends." },
+            { v1: 3, v2: 3, desc: "3-Man drinks 2 | Challenge." },
+            { v1: 3, v2: 4, desc: "3-Man drinks 1 | SOCIAL | Left neighbor drinks." },
+            { v1: 3, v2: 5, desc: "3-Man drinks 1." },
+            { v1: 3, v2: 6, desc: "3-Man drinks 1." },
+            { v1: 4, v2: 4, desc: "SOCIAL | Challenge." },
+            { v1: 4, v2: 5, desc: "SOCIAL." },
+            { v1: 4, v2: 6, desc: "SOCIAL." },
+            { v1: 5, v2: 5, desc: "THUMBS! Last one down drinks | Challenge." },
+            { v1: 5, v2: 6, desc: "Right neighbor drinks." },
+            { v1: 6, v2: 6, desc: "Challenge." }
+        ];
+
+        this.guideBody.innerHTML = combinations.map(c => `
+            <tr>
+                <td>
+                    <div class="dice-pair-ui">
+                        ${this.renderDieUI(c.v1)}
+                        ${this.renderDieUI(c.v2)}
+                    </div>
+                </td>
+                <td>${c.desc}</td>
+            </tr>
+        `).join('');
+    },
+
+    renderDieUI(val) {
+        let pips = "";
+        for(let i=0; i<val; i++) pips += '<div class="pip"></div>';
+        return `<div class="die-ui" data-val="${val}">${pips}</div>`;
+    },
 
     renderPlayers(players, removeCallback) {
         this.playerList.innerHTML = players.map((p, k) => `

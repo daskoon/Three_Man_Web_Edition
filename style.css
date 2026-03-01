@@ -131,3 +131,115 @@ button:active { transform: scale(0.96); }
     opacity: 0.8;
 }
 
+/* --- HUD BUTTONS --- */
+#hud-buttons {
+    display: flex;
+    gap: 5px;
+    flex-wrap: wrap;
+    justify-content: center;
+    margin-top: 10px;
+    pointer-events: auto;
+}
+
+.hud-btn {
+    background: rgba(0,0,0,0.6);
+    color: white;
+    border: 1px solid rgba(255,255,255,0.3);
+    padding: 6px 10px;
+    font-size: 0.65rem;
+    cursor: pointer;
+    text-decoration: none;
+    display: inline-block;
+    border-radius: 4px;
+    transition: all 0.2s;
+    font-family: inherit;
+    font-weight: 700;
+}
+
+.hud-btn:hover {
+    background: var(--gold);
+    color: black;
+    border-color: var(--gold);
+}
+
+/* --- LARGE MODAL (GUIDE) --- */
+.large-modal {
+    max-width: 90vw;
+    max-height: 80vh;
+    width: 500px;
+    overflow-y: auto;
+    padding: 20px;
+}
+
+.guide-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.8rem;
+    color: white;
+    margin-bottom: 20px;
+}
+
+.guide-table th {
+    color: var(--gold);
+    text-align: left;
+    padding: 10px;
+    border-bottom: 2px solid rgba(255,215,0,0.3);
+}
+
+.guide-table td {
+    padding: 8px 10px;
+    border-bottom: 1px solid rgba(255,255,255,0.1);
+    text-align: left;
+}
+
+/* --- FLAT DICE VISUALS (CSS) --- */
+.dice-pair-ui {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+}
+
+.die-ui {
+    width: 24px;
+    height: 24px;
+    background: #b22222;
+    border-radius: 4px;
+    position: relative;
+    display: grid;
+    grid-template-areas: "a b c" "d e f" "g h i";
+    padding: 3px;
+    box-sizing: border-box;
+}
+
+.pip {
+    width: 4px;
+    height: 4px;
+    background: white;
+    border-radius: 50%;
+    justify-self: center;
+    align-self: center;
+}
+
+/* Pip Positions mapping */
+.die-ui[data-val="1"] .pip { grid-area: e; }
+.die-ui[data-val="2"] .pip:nth-child(1) { grid-area: a; }
+.die-ui[data-val="2"] .pip:nth-child(2) { grid-area: i; }
+.die-ui[data-val="3"] .pip:nth-child(1) { grid-area: a; }
+.die-ui[data-val="3"] .pip:nth-child(2) { grid-area: e; }
+.die-ui[data-val="3"] .pip:nth-child(3) { grid-area: i; }
+.die-ui[data-val="4"] .pip:nth-child(1) { grid-area: a; }
+.die-ui[data-val="4"] .pip:nth-child(2) { grid-area: c; }
+.die-ui[data-val="4"] .pip:nth-child(3) { grid-area: g; }
+.die-ui[data-val="4"] .pip:nth-child(4) { grid-area: i; }
+.die-ui[data-val="5"] .pip:nth-child(1) { grid-area: a; }
+.die-ui[data-val="5"] .pip:nth-child(2) { grid-area: c; }
+.die-ui[data-val="5"] .pip:nth-child(3) { grid-area: e; }
+.die-ui[data-val="5"] .pip:nth-child(4) { grid-area: g; }
+.die-ui[data-val="5"] .pip:nth-child(5) { grid-area: i; }
+.die-ui[data-val="6"] .pip:nth-child(1) { grid-area: a; }
+.die-ui[data-val="6"] .pip:nth-child(2) { grid-area: c; }
+.die-ui[data-val="6"] .pip:nth-child(3) { grid-area: d; }
+.die-ui[data-val="6"] .pip:nth-child(4) { grid-area: f; }
+.die-ui[data-val="6"] .pip:nth-child(5) { grid-area: g; }
+.die-ui[data-val="6"] .pip:nth-child(6) { grid-area: i; }
+

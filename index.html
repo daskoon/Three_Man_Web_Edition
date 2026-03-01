@@ -54,8 +54,33 @@
         
         <div id="bottom-hud">
             <div id="action-text">TAP TO ROLL</div>
-            <button id="freecam-btn" style="pointer-events: auto; background: rgba(0,0,0,0.5); color: white; border: 1px solid white; padding: 5px; font-size: 0.6rem; margin-top: 10px; display: inline-block; margin-right: 10px;">FREE CAM: OFF</button>
-            <button id="download-logs-btn" style="pointer-events: auto; background: rgba(0,0,0,0.5); color: white; border: 1px solid white; padding: 5px; font-size: 0.6rem; margin-top: 10px; display: inline-block;">DOWNLOAD LOGS</button>
+            <div id="hud-buttons">
+                <button id="freecam-btn" class="hud-btn">FREE CAM: OFF</button>
+                <button id="guide-btn" class="hud-btn">ROLL GUIDE</button>
+                <a href="rulebook.pdf" target="_blank" id="rulebook-btn" class="hud-btn">OFFICIAL RULES (PDF)</a>
+                <button id="download-logs-btn" class="hud-btn">DOWNLOAD LOGS</button>
+            </div>
+        </div>
+
+        <!-- Roll Guide Modal -->
+        <div id="guide-screen" class="overlay hidden">
+            <div class="modal large-modal">
+                <h2 style="color:var(--gold)">ROLL GUIDE</h2>
+                <div id="guide-content">
+                    <table class="guide-table">
+                        <thead>
+                            <tr>
+                                <th>Roll</th>
+                                <th>Effect</th>
+                            </tr>
+                        </thead>
+                        <tbody id="guide-body">
+                            <!-- Populated by JS -->
+                        </tbody>
+                    </table>
+                </div>
+                <button id="close-guide-btn" class="secondary-btn">CLOSE</button>
+            </div>
         </div>
 
         <div id="drinks-overlay" class="overlay hidden">

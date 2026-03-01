@@ -365,6 +365,9 @@ document.getElementById('freecam-btn').onclick = (e) => {
     e.target.style.color = isFreeCam ? 'black' : 'white';
 };
 
+document.getElementById('guide-btn').onclick = () => UI.showGuide(true);
+document.getElementById('close-guide-btn').onclick = () => UI.showGuide(false);
+
 let frameCount = 0;
 function animate() {
     requestAnimationFrame(animate);
