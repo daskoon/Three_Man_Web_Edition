@@ -119,20 +119,21 @@ function initializeGameObjects() {
             scene.add(d.mesh);
 
             // COLLISION LISTENER (Premium Audio/Haptics)
+            // Remove existing listener if any to prevent duplicates
+            d.body.removeEventListener('collide'); 
             d.body.addEventListener('collide', (e) => {
-                // IMPORTANT: Prevent ghost clacks after settlement or during sleep
+                // IMPORTANT: Strictly prevent audio during transition or results
                 if (gameState !== 'ROLLING' && gameState !== 'SHAKING') return;
                 if (d.body.sleepState === CANNON.Body.SLEEPING) return;
                 
                 const velocity = e.contact.getImpactVelocityAlongNormal();
-                if (velocity < 0.5) return; // Ignore micro-jitters
+                if (velocity < 0.8) return; // Increased threshold to ignore micro-settling
 
                 // Distinguish collision types
                 const otherBody = e.body;
                 const isDieOnDie = dice.some(other => other.body === otherBody);
                 
                 // Identify Rails (Wood) vs Floor (Felt)
-                // The Floor is the only body at y=4.0 with infinite plane or large mass
                 const isFloor = otherBody.position.y === 4.0;
                 const isRail = !isDieOnDie && !isFloor;
 
@@ -143,7 +144,6 @@ function initializeGameObjects() {
                     if (audio) audio.playWood(velocity);
                     HapticManager.click();
                 } else {
-                    // Floor / Felt
                     if (audio) audio.playFelt(velocity);
                     HapticManager.click();
                 }
@@ -486,16 +486,18 @@ function animate() {
 
 function resolveRoll() {
     if (dice.length < 2) return;
-    gameState = 'RESULTS'; if (audio) audio.playFelt(10);
-    HapticManager.thud();
     
-    // Lock physics bodies to prevent jitter during scale-up
+    // Lock physics bodies immediately to stop all collision events
     dice.forEach(d => {
         d.body.velocity.set(0, 0, 0);
         d.body.angularVelocity.set(0, 0, 0);
         d.body.type = CANNON.Body.STATIC;
         d.body.updateMassProperties();
     });
+
+    gameState = 'RESULTS'; 
+    if (audio) audio.playFelt(15); // Solid final thud
+    HapticManager.thud();
 
     const v1 = getFace(dice[0].mesh); const v2 = getFace(dice[1].mesh);
 
