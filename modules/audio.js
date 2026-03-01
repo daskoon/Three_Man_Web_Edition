@@ -92,7 +92,13 @@ export class DirectorAudio {
             // WHAT: Local Asset Mapping.
             this.urls = {
                 CLACK: "assets/audio/wood_clack.ogg",
-                THUD: "assets/audio/roll_impact.ogg"
+                THUD: "assets/audio/roll_impact.ogg",
+                RIGGED: "assets/placeholders/rigged.mp3",
+                WIN: "assets/placeholders/win.mp3",
+                THREE_MAN: "assets/placeholders/three_man.mp3",
+                CHEERS: "assets/placeholders/cheers.mp3",
+                KEEP_DRINKING: "assets/placeholders/keep_drinking.mp3",
+                SUCKS: "assets/placeholders/sucks.mp3"
             };
         } catch (e) {
             console.warn("AudioContext not supported:", e.message);
@@ -103,7 +109,7 @@ export class DirectorAudio {
     /**
      * WHAT: Audio Context Unlock.
      * WHY: Browsers block audio until an explicit user interaction (The PLAY button).
-     * HOW: Executes `this.ctx.resume()` and then triggers the asynchronous pre-fetching of all OGG samples via `this.pool.loadSample`.
+     * HOW: Executes `this.ctx.resume()` and then triggers the asynchronous pre-fetching of all OGG/MP3 samples via `this.pool.loadSample`.
      */
     async resume() {
         if (this.ctx && this.ctx.state === 'suspended') {
@@ -113,13 +119,30 @@ export class DirectorAudio {
             try {
                 await Promise.all([
                     this.pool.loadSample('CLACK', this.urls.CLACK),
-                    this.pool.loadSample('THUD', this.urls.THUD)
+                    this.pool.loadSample('THUD', this.urls.THUD),
+                    this.pool.loadSample('RIGGED', this.urls.RIGGED),
+                    this.pool.loadSample('WIN', this.urls.WIN),
+                    this.pool.loadSample('THREE_MAN', this.urls.THREE_MAN),
+                    this.pool.loadSample('CHEERS', this.urls.CHEERS),
+                    this.pool.loadSample('KEEP_DRINKING', this.urls.KEEP_DRINKING),
+                    this.pool.loadSample('SUCKS', this.urls.SUCKS)
                 ]);
             } catch (e) {
                 console.error("[AudioPool] Initial pre-fetch failed:", e.message);
             }
         }
     }
+
+    /**
+     * WHAT: Soundbite Triggers.
+     * WHY: To provide high-fidelity voice-over reactions to game events.
+     */
+    playRigged() { if (this.pool) this.pool.play('RIGGED', { volume: 0.8 }); }
+    playWin() { if (this.pool) this.pool.play('WIN', { volume: 0.8 }); }
+    playThreeMan() { if (this.pool) this.pool.play('THREE_MAN', { volume: 0.8 }); }
+    playCheers() { if (this.pool) this.pool.play('CHEERS', { volume: 0.8 }); }
+    playKeepDrinking() { if (this.pool) this.pool.play('KEEP_DRINKING', { volume: 0.8 }); }
+    playSucks() { if (this.pool) this.pool.play('SUCKS', { volume: 0.8 }); }
 
     /**
      * WHAT: Table "Felt" Impact.

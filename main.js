@@ -387,6 +387,9 @@ function resolveRoll() {
             const res = won ? `${players[turnIdx]} WON! ${players[originalRollerIdx]} DRINKS` : `${players[turnIdx]} FAILED! ${players[turnIdx]} DRINKS`;
             UI.setStatus(`${res}\n${UI.getTrashTalk(won ? 'win' : 'fail')}`);
             
+            // WHAT: Challenge Audio Feedback.
+            if (audio) { if (won) audio.playWin(); else audio.playSucks(); }
+
             if (won) GameStats.record(players[turnIdx], players[originalRollerIdx], 1);
             else GameStats.record(players[originalRollerIdx], players[turnIdx], 1);
 
@@ -401,6 +404,9 @@ function resolveRoll() {
                 const res = won ? `MATCH! ${players[originalRollerIdx]} DRINKS TWICE!` : `NO MATCH! ${players[challengers[0]]} & ${players[challengers[1]]} DRINK`;
                 UI.setStatus(`${res}\n${UI.getTrashTalk(won ? 'win' : 'fail')}`);
                 
+                // WHAT: Split Challenge Audio Feedback.
+                if (audio) { if (won) audio.playWin(); else audio.playKeepDrinking(); }
+
                 if (won) GameStats.record(players[turnIdx], players[originalRollerIdx], 2);
                 else { GameStats.record(players[originalRollerIdx], players[challengers[0]], 1); GameStats.record(players[originalRollerIdx], players[challengers[1]], 1); }
 
@@ -412,7 +418,13 @@ function resolveRoll() {
     } else {
         const { events, newThreeManIdx, threeManPenalty, isDoubles, penalties, triggeredLaws } = evaluateRules(v1, v2, players, turnIdx, threeManIdx, isVirgin);
         if (threeManPenalty) UI.setShame(true);
-        if (audio && events.some(e => e.includes("SOCIAL"))) audio.playSocial();
+        
+        // WHAT: Voice-over Logic.
+        if (audio) {
+            if (newThreeManIdx !== threeManIdx) audio.playThreeMan();
+            else if (events.some(e => e.includes("SOCIAL"))) audio.playCheers();
+            else if (threeManPenalty) audio.playSocial(); 
+        }
         
         penalties.forEach(p => GameStats.record(players[turnIdx], p.name, p.count));
         
@@ -499,6 +511,10 @@ function triggerSloppy() {
     if (gameState === 'SLOPPY') return;
     gameState = 'SLOPPY'; log(" [SYSTEM] SLOPPY TRIGGERED");
     UI.setStatus(`SLOPPY! DRINK 2 & REROLL\n${UI.getTrashTalk('sloppy')}`);
+    
+    // WHAT: Sloppy Audio Feedback.
+    if (audio) audio.playRigged();
+
     // STATS: Record as chaos caused by the roller (even if to themselves)
     GameStats.record(players[turnIdx], players[turnIdx], 2); 
     HapticManager.error();
