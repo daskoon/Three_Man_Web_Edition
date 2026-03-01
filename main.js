@@ -364,14 +364,21 @@ function resolveRoll() {
             }
         }
     } else {
-        const { events, newThreeManIdx, threeManPenalty, isDoubles, penalties } = evaluateRules(v1, v2, players, turnIdx, threeManIdx, isVirgin);
+        const { events, newThreeManIdx, threeManPenalty, isDoubles, penalties, triggeredLaws } = evaluateRules(v1, v2, players, turnIdx, threeManIdx, isVirgin);
         if (threeManPenalty) UI.setShame(true);
         if (audio && events.some(e => e.includes("SOCIAL"))) audio.playSocial();
         
         penalties.forEach(p => GameStats.record(players[turnIdx], p.name, p.count));
         
         threeManIdx = newThreeManIdx;
-        const statusStr = `ROLLED ${v1} & ${v2}\n${events.join(' | ')}`;
+        
+        // WHAT: HUD Callout Construction.
+        // WHY: To clearly differentiate core rules from custom 'Snake Eyes' laws.
+        let statusStr = `ROLLED ${v1} & ${v2}\n${events.join(' | ')}`;
+        if (triggeredLaws && triggeredLaws.length > 0) {
+            statusStr = `LAW ENFORCED:\n${triggeredLaws.join('\n')}`;
+        }
+        
         UI.setStatus(statusStr); 
         updateHUD(); isVirgin = false;
 

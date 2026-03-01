@@ -1,36 +1,33 @@
-/**
- * @file rules.js
- * @description The "Commandments" - Drinking Game Logic Engine.
- * 
- * WHO: Principal Architect (Agent) & The Boss (Skoon).
- * WHAT: Evaluates 3D dice faces against the official "Skoon Edition" rulebook and Custom Laws.
- * WHY: To provide a central authority for all drinking penalties and state changes.
- * HOW: Maps dice combinations to event strings. Maintains a `CustomRules` array for player-created 'Mad Libs' laws.
- * WHEN: Triggered every time the dice settle (resolveRoll).
- * WHERE: Logic core used by main.js.
- */
-
-// WHAT: Custom Law Storage.
-// WHY: To persist 'Snake Eyes' rules throughout the session.
+// WHAT: Custom Law Storage & Flagging System.
+// WHY: To persist 'Snake Eyes' rules and provide clear HUD callouts.
+// HOW: Each law is an object with logic triggers and a pre-formatted 'label' for the UI.
 export let CustomRules = [];
 
 /**
  * WHAT: Law Enactor.
  * WHY: To add a new Mad-Libs style rule to the engine.
- * HOW: Pushes a logic object into the CustomRules array.
+ * HOW: Pushes a logic object into the CustomRules array. Generates a readable string for the HUD 'Callout'.
  */
 export function addCustomRule(trigger, target, action) {
-    CustomRules.push({ trigger, target, action });
+    // Generate a human-readable label for the flagging system
+    const triggerText = trigger.replace('_', ' ');
+    const targetText = target === 'threeman' ? 'The 3-Man' : target;
+    const actionText = action.replace('_', ' ');
+    const label = `Whenever ${triggerText}, ${targetText} must ${actionText}`;
+    
+    CustomRules.push({ trigger, target, action, label });
 }
 
 /**
  * WHAT: The "Grand Evaluation" of the roll.
  * WHY: To determine who drinks, who moves, and what the HUD says.
+ * HOW: Checks core commandments first, then iterates through CustomRules 'Flags'.
  */
 export function evaluateRules(v1, v2, players, turnIdx, threeManIdx, isVirgin) {
     const total = v1 + v2;
     const events = [];
-    const penalties = []; // Format: [{ name: "Rich", count: 1, reason: "LEFT" }]
+    const penalties = []; 
+    const triggeredLaws = []; // Flags for custom rules triggered this roll
     let newThreeManIdx = threeManIdx;
     let threeManPenalty = false;
     let isDoubles = v1 === v2;
@@ -82,9 +79,9 @@ export function evaluateRules(v1, v2, players, turnIdx, threeManIdx, isVirgin) {
         penalties.push({ name: players[right], count: 1, reason: "RIGHT" });
     }
 
-    // --- CUSTOM LAWS (MAD LIBS) ---
-    // WHAT: Dynamic Rule Iteration.
-    // WHY: To enforce player-created laws from Snake Eyes rolls.
+    // --- CUSTOM LAWS (FLAGGING ENGINE) ---
+    // WHAT: Dynamic Flag Check.
+    // WHY: To call out player-created laws specifically in the HUD.
     CustomRules.forEach(rule => {
         let triggered = false;
         if (rule.trigger === 'sum_5' && total === 5) triggered = true;
@@ -96,10 +93,9 @@ export function evaluateRules(v1, v2, players, turnIdx, threeManIdx, isVirgin) {
         if (rule.trigger === 'doubles' && isDoubles) triggered = true;
 
         if (triggered) {
-            const label = rule.action.toUpperCase().replace('_', ' ');
-            events.push(`LAW: ${label}!`);
+            triggeredLaws.push(rule.label);
+            events.push("CUSTOM LAW!");
             
-            // Map target to names
             const targetNames = [];
             if (rule.target === 'everyone') players.forEach(p => targetNames.push(p));
             else if (rule.target === 'roller') targetNames.push(players[turnIdx]);
@@ -107,20 +103,8 @@ export function evaluateRules(v1, v2, players, turnIdx, threeManIdx, isVirgin) {
             else if (rule.target === 'left') targetNames.push(players[(turnIdx - 1 + players.length) % players.length]);
             else if (rule.target === 'right') targetNames.push(players[(turnIdx + 1) % players.length]);
 
-            // WHAT: Action Resolution.
-            // WHY: Maps Mad-Libs strings to actual penalty counts or state changes.
-            if (rule.action === 'become_3man') {
-                if (targetNames.length > 0) {
-                    // Note: If multiple people are targeted (e.g. Everyone), 
-                    // only the last one in the array actually keeps the title.
-                    newThreeManIdx = players.indexOf(targetNames[targetNames.length - 1]);
-                }
-            } else {
-                let drinkCount = 1;
-                if (rule.action === 'drink_2') drinkCount = 2;
-                if (rule.action === 'drink_3') drinkCount = 3;
-                targetNames.forEach(name => penalties.push({ name, count: drinkCount, reason: "CUSTOM LAW" }));
-            }
+            const drinkCount = rule.action === 'drink_2' ? 2 : (rule.action === 'drink_3' ? 3 : 1);
+            targetNames.forEach(name => penalties.push({ name, count: drinkCount, reason: "CUSTOM LAW" }));
         }
     });
 
@@ -130,5 +114,5 @@ export function evaluateRules(v1, v2, players, turnIdx, threeManIdx, isVirgin) {
         penalties.push({ name: players[turnIdx], count: 1, reason: "VIRGIN" });
     }
 
-    return { events, newThreeManIdx, total, threeManPenalty, isDoubles, penalties };
+    return { events, newThreeManIdx, total, threeManPenalty, isDoubles, penalties, triggeredLaws };
 }
