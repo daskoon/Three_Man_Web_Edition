@@ -19,7 +19,8 @@ import { createDieTexture, getFace } from './dice.js';
 import { setupPhysics, createDieBody } from './physics.js';
 import { setupEnvironment, tableHeight } from './environment.js';
 import { updateCamera, setFreeCam, isFreeCam, handleResize } from './camera.js';
-import { evaluateRules, addCustomRule } from './rules.js';
+import { evaluateRules } from './rules.js';
+import { Laws } from './modules/laws.js';
 import { UI } from './ui.js';
 import { log, initLogButton } from './logger.js';
 
@@ -403,7 +404,7 @@ function resolveRoll() {
         if (v1 === 1 && v2 === 1) {
             gameState = 'LAWMAKING';
             UI.showLawmaker((trigger, target, action) => {
-                addCustomRule(trigger, target, action);
+                Laws.enact(trigger, target, action);
                 log(`[LAW] New rule enacted: ${trigger} -> ${target} -> ${action}`);
                 gameState = 'DECIDING';
                 triggerDoublesFlow(); // Continue to challenge after lawmaking
