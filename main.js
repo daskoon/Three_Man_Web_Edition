@@ -73,7 +73,9 @@ try {
 }
 
 try {
-    world = setupPhysics();
+    const phys = setupPhysics();
+    world = phys.world;
+    const diceMaterial = phys.diceMaterial;
     setupEnvironment(scene);
     initLogButton('download-logs-btn');
     log("[System] Physics and Environment setup complete.");
@@ -94,18 +96,22 @@ function initializeGameObjects() {
     try {
         if (!renderer || !world) return;
         
+        // Re-run setupPhysics if needed or get material
+        const phys = setupPhysics(); 
+        const diceMaterial = phys.diceMaterial;
+
         dieMaterials = [
-            new THREE.MeshStandardMaterial({ map: createDieTexture(2, renderer), transparent: true, opacity: 0.9 }),
-            new THREE.MeshStandardMaterial({ map: createDieTexture(5, renderer), transparent: true, opacity: 0.9 }),
-            new THREE.MeshStandardMaterial({ map: createDieTexture(1, renderer), transparent: true, opacity: 0.9 }),
-            new THREE.MeshStandardMaterial({ map: createDieTexture(6, renderer), transparent: true, opacity: 0.9 }),
-            new THREE.MeshStandardMaterial({ map: createDieTexture(3, renderer), transparent: true, opacity: 0.9 }),
-            new THREE.MeshStandardMaterial({ map: createDieTexture(4, renderer), transparent: true, opacity: 0.9 })
+            new THREE.MeshStandardMaterial({ map: createDieTexture(2, renderer), color: 0xff0000, emissive: 0x330000 }),
+            new THREE.MeshStandardMaterial({ map: createDieTexture(5, renderer), color: 0xff0000, emissive: 0x330000 }),
+            new THREE.MeshStandardMaterial({ map: createDieTexture(1, renderer), color: 0xff0000, emissive: 0x330000 }),
+            new THREE.MeshStandardMaterial({ map: createDieTexture(6, renderer), color: 0xff0000, emissive: 0x330000 }),
+            new THREE.MeshStandardMaterial({ map: createDieTexture(3, renderer), color: 0xff0000, emissive: 0x330000 }),
+            new THREE.MeshStandardMaterial({ map: createDieTexture(4, renderer), color: 0xff0000, emissive: 0x330000 })
         ];
 
         dice = [
-            { mesh: new THREE.Mesh(new THREE.BoxGeometry(0.19, 0.19, 0.19), dieMaterials), body: createDieBody(-0.6, world) },
-            { mesh: new THREE.Mesh(new THREE.BoxGeometry(0.19, 0.19, 0.19), dieMaterials), body: createDieBody(0.6, world) }
+            { mesh: new THREE.Mesh(new THREE.BoxGeometry(0.19, 0.19, 0.19), dieMaterials), body: createDieBody(-0.6, world, diceMaterial) },
+            { mesh: new THREE.Mesh(new THREE.BoxGeometry(0.19, 0.19, 0.19), dieMaterials), body: createDieBody(0.6, world, diceMaterial) }
         ];
         
         dice.forEach((d, i) => {
@@ -114,6 +120,7 @@ function initializeGameObjects() {
 
             // COLLISION LISTENER (Premium Audio/Haptics)
             d.body.addEventListener('collide', (e) => {
+                // IMPORTANT: Prevent ghost clacks after settlement
                 if (gameState !== 'ROLLING' && gameState !== 'SHAKING') return;
                 
                 const velocity = e.contact.getImpactVelocityAlongNormal();

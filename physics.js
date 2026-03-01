@@ -61,19 +61,31 @@ export function setupPhysics() {
         world.addBody(rail);
     }
 
-    return world;
+    // WHAT: Dice Material.
+    // WHY: Specific material to define how dice interact with each other.
+    const diceMaterial = new CANNON.Material('dice');
+    const diceContactMaterial = new CANNON.ContactMaterial(diceMaterial, diceMaterial, {
+        friction: 0.3,
+        restitution: 0.5,
+        contactEquationStiffness: 1e7,
+        contactEquationRelaxation: 3
+    });
+    world.addContactMaterial(diceContactMaterial);
+
+    return { world, diceMaterial };
 }
 
 /**
  * WHAT: Die Body Factory.
  * WHY: Creates a 19mm (0.19 unit) cube collider.
  */
-export function createDieBody(x, world) {
+export function createDieBody(x, world, diceMaterial) {
     const body = new CANNON.Body({ 
         mass: 0, 
         type: CANNON.Body.STATIC,
         linearDamping: 0.1,
-        angularDamping: 0.2
+        angularDamping: 0.2,
+        material: diceMaterial
     });
     body.addShape(new CANNON.Box(new CANNON.Vec3(0.095, 0.095, 0.095)));
     // Dice start hovering at y=8 while ready (above table at y=4)
