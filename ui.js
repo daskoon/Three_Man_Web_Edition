@@ -143,6 +143,22 @@ export const UI = {
     },
 
     /**
+     * WHAT: Roll Guide Controller.
+     * WHY: Persistent reference for all 21 dice combinations.
+     * HOW: Toggles overlay visibility. Refreshes the guide content with current session laws.
+     * @param {boolean} show - Toggle state.
+     * @param {Array} customLaws - Current session laws.
+     */
+    showGuide(show, customLaws = []) {
+        if (show) {
+            this.populateGuide(customLaws);
+            this.guide.classList.remove('hidden');
+        } else {
+            this.guide.classList.add('hidden');
+        }
+    },
+
+    /**
      * WHAT: Visual Dice Matrix.
      * WHY: To generate the flat-dice table requested by the Boss.
      * HOW: Uses a static array of rule-objects. Iterates and calls `renderDieUI` for each face value. Appends the 'SNAKE EYES RULE LIMITS' footer and any active 'Custom Laws' from the Laws module.

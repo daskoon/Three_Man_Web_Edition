@@ -26,6 +26,18 @@ import { Laws } from './modules/laws.js';
 import { UI } from './ui.js';
 import { log, initLogButton } from './logger.js';
 
+// --- CONFIGURATION ---
+/**
+ * WHAT: Founding Player Roster.
+ * WHY: Canonical list of original members for Quick Play randomized selection.
+ */
+const FOUNDING_PLAYERS = [
+    "The Skoon", "Kate", "Rich Morehead", "Blaze", 
+    "Jesskanka", "Crusty", "Spacepants", "Kim Sexy", "Ashley", 
+    "Lucifer", "Jess", "Lauren", "Joey Bars", "Egz", "BM", 
+    "Black Larry", "Shadow"
+];
+
 // --- STATE MACHINE ---
 let players = [];
 let turnIdx = 0;
@@ -310,17 +322,11 @@ document.getElementById('start-game-btn').onclick = () => {
 /**
  * WHAT: Quick Launch Handler.
  * WHY: To bypass the manual setup phase for rapid testing or 'Jump In' play.
- * HOW: Maintains an internal pool of founding members. Uses `Array.sort(() => 0.5 - Math.random())` to shuffle the list and `slice(0, 5)` to select exactly five random names for the session.
+ * HOW: Manually populates the `players` array by shuffling the `FOUNDING_PLAYERS` constant and selecting the first five names.
  */
 document.getElementById('quick-play-btn').onclick = () => {
-    const pool = [
-        "The Skoon", "Kate", "Rich Morehead", "Blaze", 
-        "Jesskanka", "Crusty", "Spacepants", "Kim Sexy", "Ashley", 
-        "Lucifer", "Jess", "Lauren", "Joey Bars", "Egz", "BM", 
-        "Black Larry", "Shadow"
-    ];
-    // Shuffle and pick 5
-    players = pool.sort(() => 0.5 - Math.random()).slice(0, 5);
+    // Shuffle and pick 5 from the canonical constant
+    players = [...FOUNDING_PLAYERS].sort(() => 0.5 - Math.random()).slice(0, 5);
     
     log(`[System] Quick Launch initiated with 5 random founding players: ${players.join(', ')}`);
     GameStats.init(players);
@@ -425,6 +431,7 @@ function resolveRoll() {
         // WHAT: Voice-over Logic.
         if (audio) {
             if (newThreeManIdx !== threeManIdx) audio.playThreeMan();
+            else if (events.some(e => e.includes("SOCIAL"))) audio.playSocial(); // Restore synthesis for core socials
             else if (threeManPenalty) audio.playSocial(); 
         }
         

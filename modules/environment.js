@@ -37,7 +37,9 @@ export function setupEnvironment(scene) {
     );
     roomFloor.rotation.x = -Math.PI / 2;
     roomFloor.position.y = -0.25;
-    roomFloor.visible = false; // Hidden by Boss
+    roomFloor.visible = false; 
+    roomFloor.castShadow = false;
+    roomFloor.receiveShadow = false;
     scene.add(roomFloor);
 
     // WHAT: Red Table Surface.
@@ -47,7 +49,9 @@ export function setupEnvironment(scene) {
     );
     tableFloor.rotation.x = -Math.PI / 2;
     tableFloor.position.y = 3.99;
-    tableFloor.visible = false; // Hidden by Boss
+    tableFloor.visible = false;
+    tableFloor.castShadow = false;
+    tableFloor.receiveShadow = false;
     scene.add(tableFloor);
 
     // WHAT: Ceiling.
@@ -117,7 +121,9 @@ export function setupEnvironment(scene) {
         const mesh = new THREE.Mesh(new THREE.BoxGeometry(2.0, RAIL_HEIGHT, 1.0), debugRailMat);
         mesh.position.set(Math.cos(angle) * railRadius, tableHeight + RAIL_HEIGHT / 2, Math.sin(angle) * railRadius);
         mesh.quaternion.setFromAxisAngle(new THREE.Vector3(0, 1, 0), -angle + Math.PI / 2);
-        mesh.visible = false; // Hidden by Boss
+        mesh.visible = false; 
+        mesh.castShadow = false;
+        mesh.receiveShadow = false;
         scene.add(mesh);
     }
 
