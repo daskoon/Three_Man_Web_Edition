@@ -4,8 +4,12 @@ This document defines the specific terminology and spatial references used in th
 
 ## 1. Spatial References (Coordinates)
 *   **The Baseline (y=4.0):** This is the height of the table surface. All primary action happens at this level.
-*   **The Floor (y=4.0):** When referring to "The Floor" or "Table Floor," we mean the **Infinite Collision Plane** at y=4.0. This catches the dice and acts as the felt surface. It is visually represented by a **Red Semi-Translucent Plane** at y=3.99.
-*   **The Room Floor (y=-0.25):** The **Red Semi-Translucent Plane** at the bottom of the room, acting as a secondary catch-all visual.
+*   **The Floor (y=4.0):** When referring to "The Floor" or "Table Floor," we mean the **Infinite Collision Plane** at y=4.0. This catches the dice and acts as the felt surface. It is visually represented by a Red Semi-Translucent Plane at y=3.99, which is currently set to **Invisible**.
+*   **The Room Floor (y=-0.25):** The Red Semi-Translucent Plane at the bottom of the room, acting as a secondary catch-all visual. Currently set to **Invisible**.
+
+## 7. Engine Lifecycle Terms
+*   **Invisible:** An object that still exists in the physics world and code memory, but is not rendered by the GPU. It can still collide with and influence other objects (e.g., The invisible Rails still catch the dice).
+*   **Gone / Deleted:** An object that has been completely removed from the Scene and the Physics World. It has no physical or visual presence.
 *   **The Ceiling (y=12.0):** The top of the room box.
 *   **The Hand (y=8.0):** The hovering position where dice wait side-by-side during the `READY` state.
 
