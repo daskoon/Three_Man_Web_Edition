@@ -143,28 +143,15 @@ export const UI = {
     },
 
     /**
-     * WHAT: Roll Guide Controller.
-     * WHY: Persistent reference for all 21 dice combinations.
-     * HOW: Toggles overlay visibility. Lazily populates the guide content on the first invocation to optimize startup performance.
-     */
-    showGuide(show) {
-        if (show) {
-            this.populateGuide();
-            this.guide.classList.remove('hidden');
-        } else {
-            this.guide.classList.add('hidden');
-        }
-    },
-
-    /**
      * WHAT: Visual Dice Matrix.
      * WHY: To generate the flat-dice table requested by the Boss.
-     * HOW: Uses a static array of rule-objects. Iterates and calls `renderDieUI` for each face value. Appends the 'SNAKE EYES RULE LIMITS' footer text via string concatenation.
+     * HOW: Uses a static array of rule-objects. Iterates and calls `renderDieUI` for each face value. Appends the 'SNAKE EYES RULE LIMITS' footer and any active 'Custom Laws' from the Laws module.
+     * @param {Array} customLaws - Optional array of active Laws objects.
      */
-    populateGuide() {
-        if (this.guideBody.innerHTML !== "") return;
+    populateGuide(customLaws = []) {
+        this.guideBody.innerHTML = ""; // Clear to ensure fresh state
 
-        const combinations = [
+        const coreCombinations = [
             { v1: 1, v2: 1, desc: "SNAKE EYES! Make a rule & Challenge." },
             { v1: 1, v2: 2, desc: "NEW THREE MAN! No one drinks." },
             { v1: 1, v2: 3, desc: "3-Man drinks 1 | SOCIAL (Everyone drinks)." },
@@ -188,12 +175,25 @@ export const UI = {
             { v1: 6, v2: 6, desc: "Challenge." }
         ];
 
-        this.guideBody.innerHTML = combinations.map(c => `
+        let html = coreCombinations.map(c => `
             <tr>
                 <td><div class="dice-pair-ui">${this.renderDieUI(c.v1)}${this.renderDieUI(c.v2)}</div></td>
                 <td>${c.desc}</td>
             </tr>
-        `).join('') + `
+        `).join('');
+
+        // WHAT: Custom Law Visibility.
+        // WHY: To show player-created rules in the guide in real-time.
+        if (customLaws && customLaws.length > 0) {
+            html += `<tr><td colspan="2" style="background:rgba(255,215,0,0.1); color:var(--gold); text-align:center; font-weight:900;">SESSION LAWS</td></tr>`;
+            html += customLaws.map(law => `
+                <tr>
+                    <td colspan="2" style="color:#fff;">• ${law.label}</td>
+                </tr>
+            `).join('');
+        }
+
+        html += `
             <tr>
                 <td colspan="2" style="background: rgba(255,215,0,0.1); padding: 15px; border-top: 2px solid var(--gold);">
                     <h3 style="color:var(--gold); margin-top:0;">SNAKE EYES RULE LIMITS</h3>
@@ -205,6 +205,8 @@ export const UI = {
                 </td>
             </tr>
         `;
+        
+        this.guideBody.innerHTML = html;
     },
 
     /**

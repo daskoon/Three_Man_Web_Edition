@@ -618,7 +618,7 @@ function animate() {
 animate();
 window.addEventListener('resize', () => handleResize(camera, renderer));
 
-document.getElementById('guide-btn').onclick = () => UI.showGuide(true);
+document.getElementById('guide-btn').onclick = () => UI.showGuide(true, Laws.getLaws());
 document.getElementById('close-guide-btn').onclick = () => UI.showGuide(false);
 
 document.getElementById('stats-btn').onclick = () => UI.showStats(true, GameStats);
