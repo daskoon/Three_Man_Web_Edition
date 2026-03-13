@@ -14,6 +14,10 @@ import * as THREE from 'three';
 import * as CANNON from 'cannon-es';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader';
 import * as SkeletonUtils from 'three/addons/utils/SkeletonUtils.js';
+import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
+import { FilmPass } from 'three/addons/postprocessing/FilmPass.js';
 import { DirectorAudio } from './modules/audio.js';
 import { HapticManager } from './modules/haptics.js';
 import { GameStats } from './modules/stats.js';
@@ -53,6 +57,7 @@ let originalRollerIdx = -1;
 let challengers = [];
 let diceRolledCount = 0;
 let playerMeshes = [];
+let audioMuted = false; // WHAT: Audio Safety Gate. WHY: To prevent 'Ghost Clacks' during state transitions.
 
 let isLeftDown = false;
 let isRightDown = false;
@@ -83,7 +88,7 @@ const safeSetTimeout = (fn, delay) => {
 };
 
 // --- 3D ENGINE INITIALIZATION ---
-let scene, camera, renderer, world;
+let scene, camera, renderer, world, composer;
 
 try {
     scene = new THREE.Scene();
@@ -94,14 +99,26 @@ try {
     const canvas = document.getElementById('game-canvas');
     if (!canvas) throw new Error("Canvas element 'game-canvas' not found!");
     
-    renderer = new THREE.WebGLRenderer({ canvas: canvas, antialias: true });
+    renderer = new THREE.WebGLRenderer({ canvas: canvas, antialias: true, powerPreference: "high-performance" });
     renderer.setSize(window.innerWidth, window.innerHeight);
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     renderer.shadowMap.enabled = true;
-    log("[System] Three.js Renderer initialized.");
+    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    renderer.toneMapping = THREE.ReinhardToneMapping;
+
+    // WHAT: Post-Processing Stack (Director's Cut Style).
+    composer = new EffectComposer(renderer);
+    composer.addPass(new RenderPass(scene, camera));
+    
+    const bloomPass = new UnrealBloomPass(new THREE.Vector2(window.innerWidth, window.innerHeight), 0.4, 0.4, 0.85);
+    composer.addPass(bloomPass);
+
+    const filmPass = new FilmPass(0.15, 0.025, 648, false); // Subtle basement grain
+    composer.addPass(filmPass);
+
+    log("[System] Director's Post-Processing initialized.");
 } catch (e) {
     log(`[CRITICAL] Renderer initialization failed: ${e.message}`);
-    alert("WebGL initialization failed! Please check your browser support.");
 }
 
 try {
@@ -155,13 +172,19 @@ function initializeGameObjects(diceMaterial) {
              * WHY: To trigger material-specific audio/haptics based on physics data.
              */
             const onCollide = (e) => {
+                if (audioMuted) return; // WHAT: The Kill Switch. WHY: Stops ghost clacks.
                 if (gameState !== 'ROLLING' && gameState !== 'SHAKING') return;
                 if (d.body.sleepState === CANNON.Body.SLEEPING) return;
 
                 const velocity = e.contact.getImpactVelocityAlongNormal();
-                if (velocity < 0.8) return; 
+                if (velocity < 0.8) return;
+
+                // WHAT: Impact Feedback.
+                if (velocity > 5) triggerShake(velocity * 0.02);
+                if (velocity > 10) createImpactParticles(d.mesh.position, 0xffd700);
 
                 const otherBody = e.body;
+
                 const isDieOnDie = dice.some(other => other.body === otherBody);
                 const isFloor = otherBody.position.y === 4.0;
                 const isRail = !isDieOnDie && !isFloor;
@@ -243,7 +266,7 @@ async function setupPlayerPresences() {
  * HOW: Updates the `emissive` color and `emissiveIntensity` of player meshes. Uses modulo arithmetic `(turnIdx +/- 1 + length) % length` to identify the 'Left' and 'Right' neighbors relative to the current roller.
  */
 const updateHUD = () => {
-    UI.updateHUD(players[turnIdx], threeManIdx === -1 ? null : players[threeManIdx]);
+    UI.updateHUD(players[turnIdx], threeManIdx === -1 ? null : players[threeManIdx], GameStats);
     playerMeshes.forEach((p, i) => {
         let isHighlighted = false;
         let roleStr = "";
@@ -357,6 +380,7 @@ function throwDice() {
     
     log(`>>> ${players[turnIdx].toUpperCase()} ROLLS FROM POV >>>`);
     gameState = 'ROLLING'; settleTimer = 0; rollStartTime = performance.now();
+    audioMuted = false; // WHAT: Audio Reactivation. WHY: Enable sound for the new throw.
     UI.setStatus("THROW!");
 
     dice.forEach((d, i) => {
@@ -374,6 +398,34 @@ function throwDice() {
     vibrate(150);
 }
 
+// --- PARTICLE SYSTEM ---
+const particles = [];
+function createImpactParticles(pos, color = 0xffd700) {
+    for (let i = 0; i < 12; i++) {
+        const p = new THREE.Mesh(
+            new THREE.SphereGeometry(0.02, 4, 4),
+            new THREE.MeshBasicMaterial({ color: color, transparent: true })
+        );
+        p.position.copy(pos);
+        const vel = new THREE.Vector3((Math.random()-0.5)*0.2, Math.random()*0.2, (Math.random()-0.5)*0.2);
+        particles.push({ mesh: p, vel: vel, life: 1.0 });
+        scene.add(p);
+    }
+}
+
+function updateParticles(dt) {
+    for (let i = particles.length - 1; i >= 0; i--) {
+        const p = particles[i];
+        p.mesh.position.add(p.vel);
+        p.life -= dt * 2;
+        p.mesh.material.opacity = p.life;
+        if (p.life <= 0) {
+            scene.remove(p.mesh);
+            particles.splice(i, 1);
+        }
+    }
+}
+
 /**
  * WHAT: Roll Resolver.
  * WHY: Evaluates the outcome, updates stats, and manages turn progression.
@@ -382,15 +434,23 @@ function throwDice() {
 function resolveRoll() {
     if (dice.length < 2) return;
     
+    audioMuted = true; // WHAT: Immediate Silence. WHY: Prevent Cannon-es 'Static' transition clacks.
     dice.forEach(d => {
         d.body.velocity.set(0, 0, 0); d.body.angularVelocity.set(0, 0, 0);
         d.body.type = CANNON.Body.STATIC; d.body.updateMassProperties();
+        if (d.body._collideListener) d.body.removeEventListener('collide', d.body._collideListener);
+        
+        // Reset emissive
+        d.mesh.material.forEach(m => { m.emissive.set(0x000000); m.emissiveIntensity = 0; });
     });
 
     gameState = 'RESULTS'; if (audio) audio.playFelt(15); HapticManager.thud();
+    triggerShake(0.5); // Add a thud shake
+
     const v1 = getFace(dice[0].mesh); const v2 = getFace(dice[1].mesh);
 
     if (originalRollerIdx !== -1) {
+        // ... (Challenge logic remains same)
         const won = (v1 === v2);
         if (challengeType === 'SINGLE') {
             const res = won ? `${players[turnIdx]} WON! ${players[originalRollerIdx]} DRINKS` : `${players[turnIdx]} FAILED! ${players[turnIdx]} DRINKS`;
@@ -552,6 +612,7 @@ function triggerSloppy() {
 function animate() {
     requestAnimationFrame(animate);
     const dt = 1/60; world.step(dt);
+    updateParticles(dt);
 
     if (gameState !== 'SPLASH' && gameState !== 'SETUP') {
         updateCamera(camera, gameState, playerMeshes, turnIdx, dice, tableHeight, lerpFactor, isLeftDown, isRightDown, movement, keys, dt);
@@ -619,7 +680,9 @@ function animate() {
             p.labelEl.classList.remove('hidden');
         });
     }
-    renderer.render(scene, camera);
+    
+    if (composer) composer.render();
+    else renderer.render(scene, camera);
 }
 
 animate();

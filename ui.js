@@ -137,9 +137,10 @@ export const UI = {
      * WHY: Keeps the top bars consistent with current game state.
      * HOW: Directly updates the `innerText` of the badge spans.
      */
-    updateHUD(player, threeMan) {
+    updateHUD(player, threeMan, statsEngine) {
+        const title = statsEngine ? statsEngine.getPlayerTitle(player) : "DICE ROLLER";
         this.threeMan.innerText = `3MAN: ${threeMan ? threeMan.toUpperCase() : 'NONE'}`;
-        this.turn.innerText = `TURN: ${player ? player.toUpperCase() : '...'}`;
+        this.turn.innerText = `${player ? player.toUpperCase() : '...'} (${title})`;
     },
 
     /**

@@ -84,12 +84,27 @@ export const GameStats = {
 
     /**
      * WHAT: Rivalry Reporter.
-     * WHY: To highlight the "Beef" of the night.
      * HOW: Sorts the `rivalries` key-value pairs by magnitude and returns the top entry as a single-element array.
      */
     getRivalryReport() {
         return Object.entries(this.rivalries)
             .sort((a, b) => b[1] - a[1])
             .slice(0, 1);
+    },
+
+    /**
+     * WHAT: Player Title Engine.
+     * WHY: To provide whimsical identity based on session performance.
+     */
+    getPlayerTitle(name) {
+        const stats = this.players[name];
+        if (!stats) return "FRESH MEAT";
+        if (stats.received > 30) return "LIVER OF STEEL";
+        if (stats.received > 15) return "TIPSY TONY";
+        if (stats.given > 25) return "THE ENFORCER";
+        if (stats.maxStreak > 4) return "ON A RAMPAGE";
+        if (stats.received === 0 && stats.given > 0) return "THE CHOSEN ONE";
+        if (stats.received === 0) return "VIRGIN LIVER";
+        return "DICE ROLLER";
     }
 };

@@ -24,12 +24,31 @@ export function createDieTexture(number, renderer) {
     canvas.width = 256; canvas.height = 256;
     const ctx = canvas.getContext('2d');
     
-    // WHAT: Background Fill.
-    ctx.fillStyle = '#b22222';
+    // WHAT: Premium Background.
+    const grad = ctx.createRadialGradient(128, 128, 10, 128, 128, 150);
+    grad.addColorStop(0, '#d32f2f'); // Brighter red center
+    grad.addColorStop(1, '#8b0000'); // Darker edges
+    ctx.fillStyle = grad;
     ctx.fillRect(0, 0, 256, 256);
+
+    // WHAT: Subtle Grain/Noise.
+    for (let i = 0; i < 500; i++) {
+        ctx.fillStyle = `rgba(255,255,255,${Math.random() * 0.05})`;
+        ctx.fillRect(Math.random() * 256, Math.random() * 256, 1, 1);
+    }
     
+    // WHAT: Die Border (Bevel effect).
+    ctx.strokeStyle = 'rgba(0,0,0,0.3)';
+    ctx.lineWidth = 10;
+    ctx.strokeRect(5, 5, 246, 256);
+    ctx.strokeStyle = 'rgba(255,255,255,0.1)';
+    ctx.lineWidth = 5;
+    ctx.strokeRect(2, 2, 252, 252);
+
     // WHAT: Pip Layout Mapping.
     ctx.fillStyle = '#ffffff';
+    ctx.shadowColor = 'rgba(0,0,0,0.5)';
+    ctx.shadowBlur = 4;
     const pips = {
         1: [[128, 128]], 2: [[64, 64], [192, 192]], 3: [[64, 64], [128, 128], [192, 192]],
         4: [[64, 64], [192, 64], [64, 192], [192, 192]], 5: [[64, 64], [192, 64], [128, 128], [64, 192], [192, 192]],
