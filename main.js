@@ -516,6 +516,21 @@ function resolveRoll() {
         UI.setStatus(statusStr); 
         updateHUD(); isVirgin = false;
 
+        // WHAT: 3-Man Glow Effect.
+        if (newThreeManIdx !== threeManIdx || threeManPenalty) {
+            dice.forEach(d => {
+                d.mesh.material.forEach(m => {
+                    m.emissive.set(0xffd700);
+                    m.emissiveIntensity = 1.5;
+                });
+            });
+            createImpactParticles(dice[0].mesh.position, 0xffd700);
+            createImpactParticles(dice[1].mesh.position, 0xffd700);
+            celebrate(1.5); // BIG PARTY
+        } else if (events.some(e => e.includes("SOCIAL"))) {
+            celebrate(1.0); // REGULAR PARTY
+        }
+
         // WHAT: News Ticker Headline Generation.
         // WHY: To provide the 'CNN-style' barker requested by Boss.
         // HOW: Transforms the multi-line HUD status into a single-line marquee string.
@@ -578,17 +593,31 @@ function triggerDoublesFlow() {
     });
 }
 
+function celebrate(intensity = 1.0) {
+    playerMeshes.forEach(p => {
+        if (p.mixer) p.mixer.timeScale = 3.0 * intensity;
+        // Visual 'Jump'
+        const originalY = p.mesh.position.y;
+        p.mesh.position.y += 0.5 * intensity;
+        setTimeout(() => { 
+            if (p.mesh) p.mesh.position.y = originalY;
+            if (p.mixer) p.mixer.timeScale = 1.0; 
+        }, 1000);
+    });
+}
+
 /**
  * WHAT: Sloppy Dice Handler.
  * WHY: Penalizes players for rolling off the table surface.
- * HOW: Interrupts the current state, records a self-penalty in `GameStats`, and triggers a long haptic error pattern. Resets dice to the player's 'Hand' position after a 3-second delay.
  */
 function triggerSloppy() {
     if (gameState === 'SLOPPY') return;
     gameState = 'SLOPPY'; log(" [SYSTEM] SLOPPY TRIGGERED");
     UI.setStatus(`SLOPPY! DRINK 2 & REROLL\n${UI.getTrashTalk('sloppy')}`);
     
-    // WHAT: Sloppy Audio Feedback.
+    // WHAT: Sloppy Juice.
+    triggerShake(1.5);
+    celebrate(0.5); // Mocking the player
     if (audio) audio.playRigged();
 
     // STATS: Record as chaos caused by the roller (even if to themselves)
@@ -626,6 +655,7 @@ function animate() {
         }
 
         dice.forEach((d, i) => {
+            const targetScale = isGiantDice ? 8 : (gameState === 'RESULTS' ? 4 : 1);
             if (gameState === 'READY' || (gameState === 'CHALLENGE_READY' && challengeType === 'SPLIT' && i >= diceRolledCount)) {
                 const pMesh = playerMeshes[turnIdx].mesh;
                 const angle = playerMeshes[turnIdx].angle;
@@ -635,7 +665,7 @@ function animate() {
 
                 if (!isFreeCam) {
                     d.mesh.position.lerp(hoverPos, lerpFactor);
-                    d.mesh.scale.lerp(new THREE.Vector3(4, 4, 4), lerpFactor);
+                    d.mesh.scale.lerp(new THREE.Vector3(targetScale, targetScale, targetScale), lerpFactor);
                     d.mesh.rotation.y += 0.01;
                     d.body.position.set(d.mesh.position.x, d.mesh.position.y, d.mesh.position.z);
                     d.body.type = CANNON.Body.STATIC;
@@ -651,13 +681,12 @@ function animate() {
                     d.body.position.z = pMesh.position.z * 0.5 + (Math.random()-0.5) * jitterAmount;
                     d.body.position.y = tableHeight + 4 + (Math.random()-0.5) * jitterAmount;
                     d.mesh.position.copy(d.body.position); d.mesh.quaternion.copy(d.body.quaternion);
-                    d.mesh.scale.lerp(new THREE.Vector3(1, 1, 1), lerpFactor);
+                    d.mesh.scale.lerp(new THREE.Vector3(targetScale, targetScale, targetScale), lerpFactor);
                 }
             } else {
                 if (!isFreeCam) {
                     d.mesh.position.copy(d.body.position); d.mesh.quaternion.copy(d.body.quaternion);
-                    if (gameState === 'RESULTS') d.mesh.scale.lerp(new THREE.Vector3(4, 4, 4), lerpFactor);
-                    else d.mesh.scale.lerp(new THREE.Vector3(1, 1, 1), lerpFactor);
+                    d.mesh.scale.lerp(new THREE.Vector3(targetScale, targetScale, targetScale), lerpFactor);
                     const visualOffset = 0.095 * (d.mesh.scale.x - 1);
                     d.mesh.position.y += visualOffset;
                 }
@@ -710,7 +739,22 @@ window.addEventListener('mousemove', (e) => {
     movement.y = e.movementY;
 });
 
-window.addEventListener('keydown', (e) => { keys[e.code] = true; });
+let secretSequence = "";
+let isGiantDice = false;
+
+window.addEventListener('keydown', (e) => { 
+    keys[e.code] = true; 
+    
+    // WHAT: Easter Egg Detector.
+    secretSequence += e.key.toUpperCase();
+    if (secretSequence.includes("SKOON")) {
+        isGiantDice = !isGiantDice;
+        secretSequence = "";
+        log(`[SECRET] Giant Dice ${isGiantDice ? 'Enabled' : 'Disabled'}`);
+        vibrate([100, 50, 100]);
+    }
+    if (secretSequence.length > 10) secretSequence = secretSequence.substring(1);
+});
 window.addEventListener('keyup', (e) => { keys[e.code] = false; });
 
 window.onmousedown = (e) => {
