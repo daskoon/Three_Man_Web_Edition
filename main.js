@@ -617,6 +617,7 @@ function triggerSloppy() {
     
     // WHAT: Sloppy Juice.
     triggerShake(1.5);
+    UI.flashRed();
     celebrate(0.5); // Mocking the player
     if (audio) audio.playRigged();
 

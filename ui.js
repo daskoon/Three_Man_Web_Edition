@@ -288,6 +288,13 @@ export const UI = {
 
     hideDrinks() { this.drinks.classList.add('hidden'); },
 
+    flashRed() {
+        const div = document.createElement('div');
+        div.className = 'flash-red';
+        document.body.appendChild(div);
+        setTimeout(() => div.remove(), 600);
+    },
+
     setShame(active) {
         if (active) this.threeManBadge.classList.add('shame-glow');
         else this.threeManBadge.classList.remove('shame-glow');
