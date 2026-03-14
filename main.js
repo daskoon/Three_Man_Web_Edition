@@ -381,7 +381,8 @@ function resolveRoll() {
         d.mesh.material.forEach(m => { m.emissive.set(0x000000); m.emissiveIntensity = 0; });
     });
 
-    if (audio) audio.playFelt(15); HapticManager.thud();
+    if (audio) { /* silence ghost thud */ } 
+    HapticManager.thud();
     triggerShake(0.5);
 
     const v1 = getFace(dice[0].mesh); const v2 = getFace(dice[1].mesh);
@@ -606,7 +607,8 @@ window.addEventListener('devicemotion', (e) => {
     accelMag = Math.sqrt(acc.x*acc.x + acc.y*acc.y + acc.z*acc.z);
     if (accelMag > 22) {
         if (gameState === 'READY' || gameState === 'CHALLENGE_READY') {
-            gameState = 'SHAKING'; setTimeout(throwDice, 800);
+            gameState = 'SHAKING'; 
+            safeSetTimeout(throwDice, 800, "MotionThrow");
         }
     }
 });
@@ -630,7 +632,8 @@ window.onmousedown = (e) => {
     if (e.button === 0) isLeftDown = true;
     if (e.button === 2) isRightDown = true;
     if ((gameState === 'READY' || gameState === 'CHALLENGE_READY') && e.target.tagName !== 'BUTTON' && e.target.tagName !== 'A') {
-        gameState = 'SHAKING'; setTimeout(throwDice, 800);
+        gameState = 'SHAKING'; 
+        safeSetTimeout(throwDice, 800, "MouseThrow");
     }
 };
 
