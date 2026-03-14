@@ -3,11 +3,9 @@
  * @description Modularized "Director's Cut" Orchestrator.
  * 
  * WHO: Principal Architect (Agent) & The Boss (Skoon).
- * WHAT: The brain of the application. Manages the state machine, physics loop, and systems integration.
- * WHY: To provide a high-fidelity, polished WebGL experience for Three Man.
- * HOW: Implements a discrete state machine (SPLASH -> SETUP -> READY -> SHAKING -> ROLLING -> RESULTS) using a top-level string variable. Orchestrates the Cannon-es physics world (`world.step`) and Three.js rendering loop (`requestAnimationFrame`). Synchronizes physical bodies to visual meshes by copying `body.position` and `body.quaternion` every frame.
- * WHEN: Continuous execution via requestAnimationFrame.
- * WHERE: Root orchestrator for the web application.
+ * WHAT: The brain of the application. Manages the state machine, physics loop, and UI coordination.
+ * WHY: To ensure a high-fidelity, synchronous drinking experience.
+ * HOW: Integrates Three.js (Visuals), Cannon-es (Physics), and Web Audio API (Sound).
  */
 
 import * as THREE from 'three';
@@ -24,17 +22,13 @@ import { GameStats } from './modules/stats.js';
 import { createDieTexture, getFace } from './modules/dice.js';
 import { setupPhysics, createDieBody } from './modules/physics.js';
 import { setupEnvironment, tableHeight } from './modules/environment.js';
-import { updateCamera, setFreeCam, isFreeCam, handleResize } from './modules/camera.js';
+import { updateCamera, setFreeCam, isFreeCam, handleResize, triggerShake } from './modules/camera.js';
 import { evaluateRules } from './modules/rules.js';
 import { Laws } from './modules/laws.js';
 import { UI } from './ui.js';
 import { log, initLogButton } from './logger.js';
 
 // --- CONFIGURATION ---
-/**
- * WHAT: Founding Player Roster.
- * WHY: Canonical list of original members for Quick Play randomized selection.
- */
 const FOUNDING_PLAYERS = [
     "The Skoon", "Kate", "Rich Morehead", "Blaze", 
     "Jesskanka", "Crusty", "Spacepants", "Kim Sexy", "Ashley", 
@@ -57,7 +51,7 @@ let originalRollerIdx = -1;
 let challengers = [];
 let diceRolledCount = 0;
 let playerMeshes = [];
-let audioMuted = false; // WHAT: Audio Safety Gate. WHY: To prevent 'Ghost Clacks' during state transitions.
+let audioMuted = false;
 
 let isLeftDown = false;
 let isRightDown = false;
@@ -68,23 +62,17 @@ const lerpFactor = 0.1;
 let audio;
 
 // --- UTILS ---
-/**
- * WHAT: Vibration Bridge.
- * WHY: Simple wrapper for the HapticManager.
- * HOW: Proxies calls to `navigator.vibrate` through the `HapticManager` abstraction to ensure cross-platform safety.
- */
 const vibrate = (pattern) => {
     HapticManager.vibrate(pattern);
 };
 
-/**
- * WHAT: Timed Action Wrapper.
- * WHY: To ensure only one game timer is active at a time and prevent memory leaks.
- * HOW: Uses `clearTimeout` on the global `gameTimer` reference before initializing a new `setTimeout` call.
- */
-const safeSetTimeout = (fn, delay) => {
+const safeSetTimeout = (fn, delay, reason = "unknown") => {
+    log(`[Timer] Setting timer for ${delay}ms. Reason: ${reason}`);
     clearTimeout(gameTimer);
-    gameTimer = setTimeout(fn, delay);
+    gameTimer = setTimeout(() => {
+        log(`[Timer] Firing timer for: ${reason}`);
+        fn();
+    }, delay);
 };
 
 // --- 3D ENGINE INITIALIZATION ---
@@ -106,14 +94,13 @@ try {
     renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     renderer.toneMapping = THREE.ReinhardToneMapping;
 
-    // WHAT: Post-Processing Stack (Director's Cut Style).
     composer = new EffectComposer(renderer);
     composer.addPass(new RenderPass(scene, camera));
     
     const bloomPass = new UnrealBloomPass(new THREE.Vector2(window.innerWidth, window.innerHeight), 0.4, 0.4, 0.85);
     composer.addPass(bloomPass);
 
-    const filmPass = new FilmPass(0.15, 0.025, 648, false); // Subtle basement grain
+    const filmPass = new FilmPass(0.15, 0.025, 648, false);
     composer.addPass(filmPass);
 
     log("[System] Director's Post-Processing initialized.");
@@ -140,11 +127,6 @@ window.onerror = (msg, url, line) => {
 let dieMaterials = [];
 let dice = [];
 
-/**
- * WHAT: Game Object Construction.
- * WHY: Creates the physical and visual dice.
- * HOW: Maps procedural textures (Canvas-generated) to `THREE.BoxGeometry` faces. Simultaneously creates `CANNON.Body` boxes with matching dimensions (0.19 units) and attaches a `collide` event listener to each body to trigger material-specific SFX.
- */
 function initializeGameObjects(diceMaterial) {
     try {
         if (!renderer || !world) return;
@@ -167,24 +149,18 @@ function initializeGameObjects(diceMaterial) {
             d.mesh.castShadow = true;
             scene.add(d.mesh);
 
-            /**
-             * WHAT: Collision Logic Handler.
-             * WHY: To trigger material-specific audio/haptics based on physics data.
-             */
             const onCollide = (e) => {
-                if (audioMuted) return; // WHAT: The Kill Switch. WHY: Stops ghost clacks.
+                if (audioMuted) return;
                 if (gameState !== 'ROLLING' && gameState !== 'SHAKING') return;
                 if (d.body.sleepState === CANNON.Body.SLEEPING) return;
 
                 const velocity = e.contact.getImpactVelocityAlongNormal();
                 if (velocity < 0.8) return;
 
-                // WHAT: Impact Feedback.
                 if (velocity > 5) triggerShake(velocity * 0.02);
                 if (velocity > 10) createImpactParticles(d.mesh.position, 0xffd700);
 
                 const otherBody = e.body;
-
                 const isDieOnDie = dice.some(other => other.body === otherBody);
                 const isFloor = otherBody.position.y === 4.0;
                 const isRail = !isDieOnDie && !isFloor;
@@ -201,25 +177,17 @@ function initializeGameObjects(diceMaterial) {
                 }
             };
 
-            // WHAT: Listener Lifecycle Management.
-            // WHY: To prevent 'Ghost Clacks' by ensuring only one listener exists per body.
-            // HOW: Stores the function reference on the body object for reliable removal.
             if (d.body._collideListener) d.body.removeEventListener('collide', d.body._collideListener);
             d.body._collideListener = onCollide;
             d.body.addEventListener('collide', onCollide);
         });
         
-        log("[System] Dice and Materials initialized.");
+        log("[System] Dice initialized.");
     } catch (e) {
         log(`[CRITICAL] GameObject initialization failed: ${e.message}`);
     }
 }
 
-/**
- * WHAT: Player Avatar Setup.
- * WHY: Replaces generic spheres with high-fidelity animated Meshy 3D models.
- * HOW: 1. Uses `GLTFLoader` to pre-fetch the base biped model. 2. For each player, clones the model and sets up an `AnimationMixer`. 3. Positions models in a radial circle around the table. 4. Updates player labels to float above the new character heads.
- */
 async function setupPlayerPresences() {
     playerMeshes.forEach(p => {
         scene.remove(p.mesh);
@@ -231,23 +199,16 @@ async function setupPlayerPresences() {
     const radius = 10.0;
     const container = document.getElementById('ui-container');
 
-    // WHAT: Base Model Loading.
-    // WHY: To ensure we have the asset once before cloning.
     const gltf = await loader.loadAsync('assets/models/Meshy_AI_biped/Meshy_AI_Animation_Alert_withSkin.glb');
 
     players.forEach((name, i) => {
         const angle = (i / players.length) * Math.PI * 2;
-        
-        // WHAT: Object Cloning.
-        // WHY: Efficient memory use for 18+ identical models.
         const model = SkeletonUtils.clone(gltf.scene);
         model.scale.set(3, 3, 3);
         model.position.set(Math.sin(angle) * radius, 0, Math.cos(angle) * radius);
-        model.lookAt(0, 0, 0); // Face the table
+        model.lookAt(0, 0, 0);
         scene.add(model);
 
-        // WHAT: Animation System.
-        // WHY: To bring the characters to life.
         const mixer = new THREE.AnimationMixer(model);
         const action = mixer.clipAction(gltf.animations[0]);
         action.play();
@@ -260,50 +221,35 @@ async function setupPlayerPresences() {
     });
 }
 
-/**
- * WHAT: HUD Synchronization.
- * WHY: Highlights the current roller and neighbors in the 3D scene.
- * HOW: Updates the `emissive` color and `emissiveIntensity` of player meshes. Uses modulo arithmetic `(turnIdx +/- 1 + length) % length` to identify the 'Left' and 'Right' neighbors relative to the current roller.
- */
 const updateHUD = () => {
     UI.updateHUD(players[turnIdx], threeManIdx === -1 ? null : players[threeManIdx], GameStats);
     playerMeshes.forEach((p, i) => {
-        let isHighlighted = false;
         let roleStr = "";
-        
         const isCurrent = (i === turnIdx);
         const isLeft = (i === (turnIdx - 1 + players.length) % players.length);
         const isRight = (i === (turnIdx + 1) % players.length);
 
-        if (isCurrent) {
-            isHighlighted = true; roleStr = "(YOU)";
-        } else if (isLeft) {
-            roleStr = "LEFT";
-        } else if (isRight) {
-            roleStr = "RIGHT";
-        }
+        if (isCurrent) roleStr = "(YOU)";
+        else if (isLeft) roleStr = "LEFT";
+        else if (isRight) roleStr = "RIGHT";
         
-        // WHAT: Visual Feedback.
-        // WHY: Since complex models don't use simple emissive on the group, we highlight the label.
         if (p.labelEl) {
             p.labelEl.querySelector('.role-text').innerText = roleStr;
-            p.labelEl.style.borderColor = isHighlighted ? 'var(--gold)' : '#444';
-            p.labelEl.style.boxShadow = isHighlighted ? '0 0 10px var(--gold-glow)' : 'none';
+            p.labelEl.style.borderColor = isCurrent ? 'var(--gold)' : '#444';
+            p.labelEl.style.boxShadow = isCurrent ? '0 0 10px var(--gold-glow)' : 'none';
         }
     });
 };
 
-/**
- * WHAT: Turn Progression (Right-Hand Rotation).
- * WHY: Dead rolls or lost challenges pass the dice to the right.
- * HOW: Increments `turnIdx` with modulo wrap-around. Switches state to `PASSING` and invokes the `UI.showPassPhone` overlay, which requires a manual user acknowledgment before returning to the `READY` state.
- */
 const nextTurn = () => {
+    log(`[Logic] nextTurn() entered. Current turnIdx: ${turnIdx}`);
     turnIdx = (turnIdx + 1) % players.length;
     isVirgin = true; originalRollerIdx = -1; challengers = []; diceRolledCount = 0;
     
     gameState = 'PASSING';
+    log(`[Logic] State: PASSING. Waiting for confirmation for ${players[turnIdx]}`);
     UI.showPassPhone(players[turnIdx], () => {
+        log(`[Logic] Pass confirmed. ${players[turnIdx]} is READY.`);
         gameState = 'READY';
         updateHUD();
         UI.setStatus(`${players[turnIdx].toUpperCase()}\nSHAKE TO ROLL`);
@@ -342,16 +288,9 @@ document.getElementById('start-game-btn').onclick = () => {
     UI.setStatus(`${players[turnIdx].toUpperCase()}\nSHAKE TO ROLL`);
 };
 
-/**
- * WHAT: Quick Launch Handler.
- * WHY: To bypass the manual setup phase for rapid testing or 'Jump In' play.
- * HOW: Manually populates the `players` array by shuffling the `FOUNDING_PLAYERS` constant and selecting the first five names.
- */
 document.getElementById('quick-play-btn').onclick = () => {
-    // Shuffle and pick 5 from the canonical constant
     players = [...FOUNDING_PLAYERS].sort(() => 0.5 - Math.random()).slice(0, 5);
-    
-    log(`[System] Quick Launch initiated with 5 random founding players: ${players.join(', ')}`);
+    log(`[System] Quick Launch with: ${players.join(', ')}`);
     GameStats.init(players);
     setupPlayerPresences();
     UI.setup.classList.add('hidden');
@@ -369,18 +308,13 @@ document.getElementById('add-player-btn').onclick = () => {
     }
 };
 
-/**
- * WHAT: The "Toss" Mechanic.
- * WHY: Applies physics impulses to simulate a manual dice throw.
- * HOW: Sets dice body types to `DYNAMIC`. Calculates a target vector from the player's 3D position toward the center (0,0,0). Applies a primary downward impulse (-15) and a horizontal inward impulse, adding a randomized `spread` to ensure non-deterministic roll outcomes.
- */
 function throwDice() {
     if (gameState !== 'SHAKING') return;
     if (dice.length < 2) return;
     
-    log(`>>> ${players[turnIdx].toUpperCase()} ROLLS FROM POV >>>`);
+    log(`>>> ${players[turnIdx].toUpperCase()} THROW >>>`);
     gameState = 'ROLLING'; settleTimer = 0; rollStartTime = performance.now();
-    audioMuted = false; // WHAT: Audio Reactivation. WHY: Enable sound for the new throw.
+    audioMuted = false;
     UI.setStatus("THROW!");
 
     dice.forEach((d, i) => {
@@ -428,117 +362,87 @@ function updateParticles(dt) {
 
 /**
  * WHAT: Roll Resolver.
- * WHY: Evaluates the outcome, updates stats, and manages turn progression.
- * HOW: Freezes all physics bodies to `STATIC`. Invokes `getFace()` to determine results via Normal-vector dot-product math. Passes results to `evaluateRules()` and iterates through returned `penalties` to update the `GameStats` engine. Triggers either a state reset (`READY`) or a turn end (`nextTurn`) based on rule hits.
+ * CRITICAL FIX: Added state guard to prevent double-resolving which freezes the game.
  */
 function resolveRoll() {
+    if (gameState !== 'ROLLING') {
+        log(`[System] resolveRoll blocked. Current state is ${gameState}, not ROLLING.`);
+        return;
+    }
+    log(`[Logic] resolveRoll entering. State: ${gameState}, turnIdx: ${turnIdx}`);
     if (dice.length < 2) return;
     
-    audioMuted = true; // WHAT: Immediate Silence. WHY: Prevent Cannon-es 'Static' transition clacks.
+    gameState = 'RESULTS'; // Lock state immediately
+    audioMuted = true;
     dice.forEach(d => {
         d.body.velocity.set(0, 0, 0); d.body.angularVelocity.set(0, 0, 0);
         d.body.type = CANNON.Body.STATIC; d.body.updateMassProperties();
         if (d.body._collideListener) d.body.removeEventListener('collide', d.body._collideListener);
-        
-        // Reset emissive
         d.mesh.material.forEach(m => { m.emissive.set(0x000000); m.emissiveIntensity = 0; });
     });
 
-    gameState = 'RESULTS'; if (audio) audio.playFelt(15); HapticManager.thud();
-    triggerShake(0.5); // Add a thud shake
+    if (audio) audio.playFelt(15); HapticManager.thud();
+    triggerShake(0.5);
 
     const v1 = getFace(dice[0].mesh); const v2 = getFace(dice[1].mesh);
+    log(`[Logic] Rolled: ${v1}, ${v2}`);
 
     if (originalRollerIdx !== -1) {
-        // ... (Challenge logic remains same)
         const won = (v1 === v2);
         if (challengeType === 'SINGLE') {
             const res = won ? `${players[turnIdx]} WON! ${players[originalRollerIdx]} DRINKS` : `${players[turnIdx]} FAILED! ${players[turnIdx]} DRINKS`;
             UI.setStatus(`${res}\n${UI.getTrashTalk(won ? 'win' : 'fail')}`);
-            
-            // WHAT: Challenge Audio Feedback.
             if (audio) { if (won) audio.playWin(); else audio.playSucks(); }
-
             if (won) GameStats.record(players[turnIdx], players[originalRollerIdx], 1);
             else GameStats.record(players[originalRollerIdx], players[turnIdx], 1);
 
             turnIdx = originalRollerIdx; originalRollerIdx = -1; challengeType = null;
-            if (won) safeSetTimeout(nextTurn, 5000);
-            else safeSetTimeout(() => { gameState = 'READY'; UI.setStatus("ROLL AGAIN"); }, 5000);
+            if (won) { log("[Logic] Challenge won -> nextTurn"); safeSetTimeout(nextTurn, 5000, "ChallengePass"); }
+            else { log("[Logic] Challenge failed -> READY"); safeSetTimeout(() => { gameState = 'READY'; UI.setStatus("ROLL AGAIN"); }, 5000, "ChallengeStay"); }
         } else {
             if (diceRolledCount === 0) {
+                log("[Logic] Split part 1 done.");
                 diceRolledCount = 1; turnIdx = challengers[1]; gameState = 'CHALLENGE_READY';
                 UI.setStatus(`${players[turnIdx].toUpperCase()}\nROLL DIE 2`);
             } else {
+                log("[Logic] Split part 2 done.");
                 const res = won ? `MATCH! ${players[originalRollerIdx]} DRINKS TWICE!` : `NO MATCH! ${players[challengers[0]]} & ${players[challengers[1]]} DRINK`;
                 UI.setStatus(`${res}\n${UI.getTrashTalk(won ? 'win' : 'fail')}`);
-                
-                // WHAT: Split Challenge Audio Feedback.
                 if (audio) { if (won) audio.playWin(); else audio.playKeepDrinking(); }
-
                 if (won) GameStats.record(players[turnIdx], players[originalRollerIdx], 2);
                 else { GameStats.record(players[originalRollerIdx], players[challengers[0]], 1); GameStats.record(players[originalRollerIdx], players[challengers[1]], 1); }
 
                 turnIdx = originalRollerIdx; originalRollerIdx = -1; challengeType = null; diceRolledCount = 0;
-                if (won) safeSetTimeout(nextTurn, 5000);
-                else safeSetTimeout(() => { gameState = 'READY'; UI.setStatus("ROLL AGAIN"); }, 5000);
+                if (won) { log("[Logic] Split won -> nextTurn"); safeSetTimeout(nextTurn, 5000, "SplitPass"); }
+                else { log("[Logic] Split failed -> READY"); safeSetTimeout(() => { gameState = 'READY'; UI.setStatus("ROLL AGAIN"); }, 5000, "SplitStay"); }
             }
         }
     } else {
         const { events, newThreeManIdx, threeManPenalty, isDoubles, penalties, triggeredLaws } = evaluateRules(v1, v2, players, turnIdx, threeManIdx, isVirgin);
         if (threeManPenalty) UI.setShame(true);
-        
-        // WHAT: Voice-over Logic.
         if (audio) {
             if (newThreeManIdx !== threeManIdx) audio.playThreeMan();
-            else if (events.some(e => e.includes("SOCIAL"))) audio.playSocial(); // Restore synthesis for core socials
+            else if (events.some(e => e.includes("SOCIAL"))) audio.playSocial();
             else if (threeManPenalty) audio.playSocial(); 
         }
         
         penalties.forEach(p => GameStats.record(players[turnIdx], p.name, p.count));
-        
         threeManIdx = newThreeManIdx;
         
-        // WHAT: HUD Callout Construction.
-        // WHY: To clearly differentiate core rules from custom 'Snake Eyes' laws.
         let statusStr = `ROLLED ${v1} & ${v2}\n${events.join(' | ')}`;
-        if (triggeredLaws && triggeredLaws.length > 0) {
-            // Append explicit penalties so players know who needs to drink for the laws
-            const lawPenalties = penalties.filter(p => p.reason === "CUSTOM LAW");
-            const lawActionStrings = lawPenalties.map(p => `${p.name} DRINKS ${p.count}`);
-            if (lawActionStrings.length > 0) {
-                statusStr += `\nLAW ENFORCED: ${lawActionStrings.join(', ')}`;
-            } else {
-                statusStr += `\nLAW ENFORCED:\n${triggeredLaws.join('\n')}`;
-            }
-        }
-        
         UI.setStatus(statusStr); 
         updateHUD(); isVirgin = false;
 
-        // WHAT: 3-Man Glow Effect.
         if (newThreeManIdx !== threeManIdx || threeManPenalty) {
-            dice.forEach(d => {
-                d.mesh.material.forEach(m => {
-                    m.emissive.set(0xffd700);
-                    m.emissiveIntensity = 1.5;
-                });
-            });
+            dice.forEach(d => { d.mesh.material.forEach(m => { m.emissive.set(0xffd700); m.emissiveIntensity = 1.5; }); });
             createImpactParticles(dice[0].mesh.position, 0xffd700);
             createImpactParticles(dice[1].mesh.position, 0xffd700);
-            celebrate(1.5); // BIG PARTY
+            celebrate(1.5);
         } else if (events.some(e => e.includes("SOCIAL"))) {
-            celebrate(1.0); // REGULAR PARTY
+            celebrate(1.0);
         }
 
-        // WHAT: News Ticker Headline Generation.
-        // WHY: To provide the 'CNN-style' barker requested by Boss.
-        // HOW: Transforms the multi-line HUD status into a single-line marquee string.
         let tickerMsg = statusStr.replace(/\n/g, ' | ');
-        if (penalties.length > 0) {
-            const totalDrinks = penalties.reduce((sum, p) => sum + (p.count || 0), 0);
-            tickerMsg += ` | LATEST CHAOS: ${totalDrinks} DRINKS DISTRIBUTED`;
-        }
         const rivalry = GameStats.getRivalryReport();
         if (rivalry.length > 0) {
             const [key, count] = rivalry[0];
@@ -547,37 +451,36 @@ function resolveRoll() {
         }
         UI.updateTicker(tickerMsg);
 
-        // WHAT: Snake Eyes Lawmaking Trigger.
-        // WHY: Per Boss request - allows creation of Mad-Libs style custom rules.
         if (v1 === 1 && v2 === 1) {
+            log("[Logic] Snake Eyes Lawmaking.");
             gameState = 'LAWMAKING';
             UI.showLawmaker((trigger, target, action) => {
                 Laws.enact(trigger, target, action);
-                log(`[LAW] New rule enacted: ${trigger} -> ${target} -> ${action}`);
                 gameState = 'DECIDING';
-                triggerDoublesFlow(); // Continue to challenge after lawmaking
+                triggerDoublesFlow();
             });
             return;
         }
 
         if (isDoubles) {
+            log("[Logic] Doubles Challenge.");
             triggerDoublesFlow();
         } else if (events.length > 0) { 
-            safeSetTimeout(() => { gameState = 'READY'; UI.setStatus("ROLL AGAIN"); }, 3000);
+            log("[Logic] Rule hits -> staying READY");
+            safeSetTimeout(() => { gameState = 'READY'; UI.setStatus("ROLL AGAIN"); }, 3000, "RuleHitsKeepTurn");
         } else { 
+            log("[Logic] No hits -> nextTurn");
             UI.setStatus(`ROLLED ${v1} & ${v2}\n${UI.getTrashTalk('dead')}`);
-            safeSetTimeout(nextTurn, 5000); 
+            safeSetTimeout(nextTurn, 5000, "DeadRollPass"); 
         }
     }
 }
 
-/**
- * WHAT: Doubles Challenge Initiation.
- * WHY: Modularized to be called after Rulemaking or immediately after a double.
- */
 function triggerDoublesFlow() {
+    log(`[Logic] triggerDoublesFlow. State: ${gameState}`);
     gameState = 'DECIDING';
     UI.showDoublesChoice((type) => {
+        log(`[Logic] Double choice: ${type}`);
         challengeType = type; originalRollerIdx = turnIdx;
         if (type === 'SINGLE') {
             UI.showPicker("PICK ONE CHALLENGER", players, 1, turnIdx, (picked) => {
@@ -596,7 +499,6 @@ function triggerDoublesFlow() {
 function celebrate(intensity = 1.0) {
     playerMeshes.forEach(p => {
         if (p.mixer) p.mixer.timeScale = 3.0 * intensity;
-        // Visual 'Jump'
         const originalY = p.mesh.position.y;
         p.mesh.position.y += 0.5 * intensity;
         setTimeout(() => { 
@@ -606,39 +508,25 @@ function celebrate(intensity = 1.0) {
     });
 }
 
-/**
- * WHAT: Sloppy Dice Handler.
- * WHY: Penalizes players for rolling off the table surface.
- */
 function triggerSloppy() {
     if (gameState === 'SLOPPY') return;
-    gameState = 'SLOPPY'; log(" [SYSTEM] SLOPPY TRIGGERED");
+    gameState = 'SLOPPY';
     UI.setStatus(`SLOPPY! DRINK 2 & REROLL\n${UI.getTrashTalk('sloppy')}`);
-    
-    // WHAT: Sloppy Juice.
     triggerShake(1.5);
     UI.flashRed();
-    celebrate(0.5); // Mocking the player
+    celebrate(0.5);
     if (audio) audio.playRigged();
-
-    // STATS: Record as chaos caused by the roller (even if to themselves)
     GameStats.record(players[turnIdx], players[turnIdx], 2); 
     HapticManager.error();
     safeSetTimeout(() => {
         if (gameState === 'SLOPPY') {
-            if (originalRollerIdx !== -1) { gameState = 'CHALLENGE_READY'; }
-            else { gameState = 'READY'; }
-            UI.setStatus(`${players[turnIdx].toUpperCase()}\nROLL AGAIN (SLOPPY)`);
+            if (originalRollerIdx !== -1) gameState = 'CHALLENGE_READY';
+            else gameState = 'READY';
+            UI.setStatus(`${players[turnIdx].toUpperCase()}\nROLL AGAIN`);
         }
-    }, 3000);
+    }, 3000, "SloppyReset");
 }
 
-// --- ENGINE LOOP ---
-/**
- * WHAT: Core Loop.
- * WHY: Main integration point for all subsystems.
- * HOW: 1. Advances Cannon world by `1/60s`. 2. Updates cinematic camera position. 3. Physically confines dice within an invisible 'Cup' during SHAKING. 4. Lerps visual meshes to their physical body positions. 5. Monitors velocity to detect "Settle" state via a time-based threshold (>0.8s below 0.1 velocity). 6. Projects player 3D coordinates to 2D screen space for floating labels.
- */
 function animate() {
     requestAnimationFrame(animate);
     const dt = 1/60; world.step(dt);
@@ -646,15 +534,6 @@ function animate() {
 
     if (gameState !== 'SPLASH' && gameState !== 'SETUP') {
         updateCamera(camera, gameState, playerMeshes, turnIdx, dice, tableHeight, lerpFactor, isLeftDown, isRightDown, movement, keys, dt);
-        const cup = scene.getObjectByName("diceCup");
-        if (cup) {
-            if (gameState === 'SHAKING') {
-                const pMesh = playerMeshes[turnIdx].mesh;
-                cup.visible = false;
-                cup.position.set(pMesh.position.x * 0.5, tableHeight + 4, pMesh.position.z * 0.5);
-            } else { cup.visible = false; }
-        }
-
         dice.forEach((d, i) => {
             const targetScale = isGiantDice ? 8 : (gameState === 'RESULTS' ? 4 : 1);
             if (gameState === 'READY' || (gameState === 'CHALLENGE_READY' && challengeType === 'SPLIT' && i >= diceRolledCount)) {
@@ -663,7 +542,6 @@ function animate() {
                 const offsetX = Math.cos(angle) * (i === 0 ? -0.8 : 0.8);
                 const offsetZ = -Math.sin(angle) * (i === 0 ? -0.8 : 0.8);
                 const hoverPos = new THREE.Vector3(pMesh.position.x * 0.5 + offsetX, tableHeight + 4, pMesh.position.z * 0.5 + offsetZ);
-
                 if (!isFreeCam) {
                     d.mesh.position.lerp(hoverPos, lerpFactor);
                     d.mesh.scale.lerp(new THREE.Vector3(targetScale, targetScale, targetScale), lerpFactor);
@@ -699,7 +577,7 @@ function animate() {
             if (isStopped) {
                 settleTimer += dt; if (settleTimer > 0.8) { log("[System] Dice settled."); resolveRoll(); }
             } else { settleTimer = 0; }
-            if (performance.now() - rollStartTime > 8000) { resolveRoll(); }
+            if (performance.now() - rollStartTime > 8000) { log("[System] Roll Timeout."); resolveRoll(); }
         }
 
         playerMeshes.forEach(p => {
@@ -710,24 +588,22 @@ function animate() {
             p.labelEl.classList.remove('hidden');
         });
     }
-    
     if (composer) composer.render();
     else renderer.render(scene, camera);
 }
 
 animate();
 window.addEventListener('resize', () => handleResize(camera, renderer));
-
 document.getElementById('guide-btn').onclick = () => UI.showGuide(true, Laws.getLaws());
 document.getElementById('close-guide-btn').onclick = () => UI.showGuide(false);
-
 document.getElementById('stats-btn').onclick = () => UI.showStats(true, GameStats);
 document.getElementById('close-stats-btn').onclick = () => UI.showStats(false);
 
 window.addEventListener('devicemotion', (e) => {
     if (gameState !== 'READY' && gameState !== 'SHAKING' && gameState !== 'CHALLENGE_READY') return;
-    const { x, y, z } = e.accelerationIncludingGravity;
-    accelMag = Math.sqrt(x*x + y*y + z*z);
+    const acc = e.accelerationIncludingGravity;
+    if (!acc) return;
+    accelMag = Math.sqrt(acc.x*acc.x + acc.y*acc.y + acc.z*acc.z);
     if (accelMag > 22) {
         if (gameState === 'READY' || gameState === 'CHALLENGE_READY') {
             gameState = 'SHAKING'; setTimeout(throwDice, 800);
@@ -735,24 +611,16 @@ window.addEventListener('devicemotion', (e) => {
     }
 });
 
-window.addEventListener('mousemove', (e) => {
-    movement.x = e.movementX;
-    movement.y = e.movementY;
-});
+window.addEventListener('mousemove', (e) => { movement.x = e.movementX; movement.y = e.movementY; });
 
 let secretSequence = "";
 let isGiantDice = false;
-
 window.addEventListener('keydown', (e) => { 
     keys[e.code] = true; 
-    
-    // WHAT: Easter Egg Detector.
     secretSequence += e.key.toUpperCase();
     if (secretSequence.includes("SKOON")) {
-        isGiantDice = !isGiantDice;
-        secretSequence = "";
-        log(`[SECRET] Giant Dice ${isGiantDice ? 'Enabled' : 'Disabled'}`);
-        vibrate([100, 50, 100]);
+        isGiantDice = !isGiantDice; secretSequence = "";
+        triggerShake(1.0); vibrate([100, 50, 100]);
     }
     if (secretSequence.length > 10) secretSequence = secretSequence.substring(1);
 });
@@ -761,7 +629,6 @@ window.addEventListener('keyup', (e) => { keys[e.code] = false; });
 window.onmousedown = (e) => {
     if (e.button === 0) isLeftDown = true;
     if (e.button === 2) isRightDown = true;
-
     if ((gameState === 'READY' || gameState === 'CHALLENGE_READY') && e.target.tagName !== 'BUTTON' && e.target.tagName !== 'A') {
         gameState = 'SHAKING'; setTimeout(throwDice, 800);
     }
