@@ -140,11 +140,11 @@ export function setupEnvironment(scene) {
 
     // --- LIGHTING ---
 
-    scene.add(new THREE.AmbientLight(0xffffff, 0.5));
-    const spot = new THREE.SpotLight(0xffd700, 3.0);
+    scene.add(new THREE.AmbientLight(0xffffff, 0.8));
+    const spot = new THREE.SpotLight(0xffd700, 5.0);
     spot.position.set(0, tableHeight + 15, 0); spot.castShadow = true; scene.add(spot);
 
-    const bulb = new THREE.PointLight(0xffaa44, 1.0, 30);
+    const bulb = new THREE.PointLight(0xffaa44, 2.5, 30);
     bulb.position.set(0, tableHeight + 10, 0);
     scene.add(bulb);
 }
