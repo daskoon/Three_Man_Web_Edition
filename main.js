@@ -212,6 +212,7 @@ async function setupPlayerPresences() {
 
         const mixer = new THREE.AnimationMixer(model);
         const action = mixer.clipAction(gltf.animations[0]);
+        action.time = Math.random() * action.getClip().duration;
         action.play();
 
         const label = document.createElement('div');
